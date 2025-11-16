@@ -1,319 +1,677 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../supabaseClient';
-import * as XLSX from 'xlsx';
 
-function AdminView({ onClose, onShowBirthday, onShowNotice, onShowCoupon, onShowStoreRequest, onShowVote }) {
-  const [customers, setCustomers] = useState([]);
-  const [stats, setStats] = useState({ total: 0, totalStamps: 0, totalCoupons: 0 });
-  const [sortConfig, setSortConfig] = useState({ key: 'last_visit', direction: 'desc' });
+function VoteManagement({ onBack }) {
+  const [votes, setVotes] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [isWriting, setIsWriting] = useState(false);
+  const [editingVote, setEditingVote] = useState(null);
+  const [formData, setFormData] = useState({
+    title: '',
+    description: '',
+    options: ['', ''],
+    ends_at: '',
+    allow_multiple: false,
+    max_selections: 1,
+    is_anonymous: false,
+    is_active: true
+  });
+  const containerRef = React.useRef(null);
+
+  // 이번 달 말일 23:59 구하기
+  const getEndOfMonth = () => {
+    const now = new Date();
+    const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+    lastDay.setHours(23, 59, 0, 0);
+    
+    const year = lastDay.getFullYear();
+    const month = String(lastDay.getMonth() + 1).padStart(2, '0');
+    const day = String(lastDay.getDate()).padStart(2, '0');
+    
+    return `${year}-${month}-${day}T23:59`;
+  };
 
   useEffect(() => {
-    loadCustomers();
+    loadVotes();
+    // 컴포넌트 마운트 시 기본값 설정
+    setFormData(prev => ({
+      ...prev,
+      ends_at: getEndOfMonth()
+    }));
   }, []);
 
-  const loadCustomers = async () => {
+  const loadVotes = useCallback(async () => {
+    setLoading(true);
     try {
       const { data, error } = await supabase
-        .from('customers')
+        .from('votes')
         .select('*')
-        .order('last_visit', { ascending: false });
+        .order('created_at', { ascending: false });
 
       if (error) throw error;
 
-      setCustomers(data);
+      // 각 투표에 대한 응답 수 가져오기
+      const votesWithStats = await Promise.all(
+        (data || []).map(async (vote) => {
+          const { count } = await supabase
+            .from('vote_responses')
+            .select('*', { count: 'exact', head: true })
+            .eq('vote_id', vote.id);
 
-      const stats = data.reduce((acc, customer) => ({
-        total: acc.total + 1,
-        totalStamps: acc.totalStamps + customer.total_stamps,
-        totalCoupons: acc.totalCoupons + customer.coupons
-      }), { total: 0, totalStamps: 0, totalCoupons: 0 });
+          return { ...vote, response_count: count || 0 };
+        })
+      );
 
-      setStats(stats);
+      setVotes(votesWithStats);
     } catch (error) {
-      console.error('Error loading customers:', error);
+      console.error('Load votes error:', error);
+      alert('투표를 불러오는 중 오류가 발생했습니다.');
+    } finally {
+      setLoading(false);
     }
-  };
+  }, []);
 
-  const exportToExcel = () => {
-    const exportData = customers.map(c => ({
-      '닉네임': c.nickname,
-      '전화번호': c.phone_number,
-      '생일': c.birthday || '-',
-      '현재 스탬프': c.current_stamps,
-      '누적 스탬프': c.total_stamps,
-      '발급된 쿠폰': c.coupons,
-      '총 방문 횟수': c.visit_count,
-      '가입일': new Date(c.first_visit).toLocaleString('ko-KR'),
-      '최근 방문일': new Date(c.last_visit).toLocaleString('ko-KR')
-    }));
+  const handleSubmit = async () => {
+    if (!formData.title.trim()) {
+      alert('제목을 입력해주세요.');
+      return;
+    }
+    
+    const validOptions = formData.options.filter(opt => opt.trim());
+    if (validOptions.length < 2) {
+      alert('최소 2개의 선택지를 입력해주세요.');
+      return;
+    }
 
-    const ws = XLSX.utils.json_to_sheet(exportData);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, '고객 데이터');
-
-    const fileName = `타로_스탬프_데이터_${new Date().toISOString().slice(0, 10)}.xlsx`;
-    XLSX.writeFile(wb, fileName);
-
-    alert('엑셀 파일이 저장되었습니다!');
-  };
-
-  const clearAllData = async () => {
-    if (!window.confirm('정말 모든 데이터를 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.')) {
+    if (formData.allow_multiple && formData.max_selections > validOptions.length) {
+      alert('최대 선택 가능 수는 전체 선택지 개수를 초과할 수 없습니다.');
       return;
     }
 
     try {
-      await supabase.from('customers').delete().neq('id', 0);
-      loadCustomers();
-      alert('모든 데이터가 삭제되었습니다.');
+      const optionsJson = validOptions.map((text, index) => ({
+        id: index + 1,
+        text: text.trim(),
+        votes: 0
+      }));
+
+      const submitData = {
+        title: formData.title,
+        description: formData.description || null,
+        options: optionsJson,
+        ends_at: formData.ends_at || null,
+        allow_multiple: formData.allow_multiple,
+        max_selections: formData.allow_multiple ? formData.max_selections : 1,
+        is_anonymous: formData.is_anonymous,
+        is_active: formData.is_active,
+        created_by: 'admin'
+      };
+
+      if (editingVote) {
+        const { count } = await supabase
+          .from('vote_responses')
+          .select('*', { count: 'exact', head: true })
+          .eq('vote_id', editingVote.id);
+
+        if (count > 0) {
+          if (!window.confirm(
+            `⚠️ 이미 ${count}명이 참여한 투표입니다.\n` +
+            `수정하면 기존 투표 결과가 유지되지만, 선택지 변경 시 결과가 맞지 않을 수 있습니다.\n\n` +
+            `계속 진행하시겠습니까?`
+          )) {
+            return;
+          }
+        }
+
+        const { error } = await supabase
+          .from('votes')
+          .update(submitData)
+          .eq('id', editingVote.id);
+
+        if (error) throw error;
+        alert('✅ 투표가 수정되었습니다!');
+      } else {
+        const { error } = await supabase
+          .from('votes')
+          .insert([submitData]);
+
+        if (error) throw error;
+        alert('✅ 투표가 생성되었습니다!');
+      }
+
+      resetForm();
+      loadVotes();
     } catch (error) {
-      console.error('Error:', error);
+      console.error('Submit error:', error);
+      alert('오류가 발생했습니다: ' + error.message);
+    }
+  };
+
+  const handleEdit = (vote) => {
+    setEditingVote(vote);
+    
+    const options = vote.options.map(opt => opt.text);
+    
+    setFormData({
+      title: vote.title,
+      description: vote.description || '',
+      options: options,
+      ends_at: vote.ends_at ? new Date(vote.ends_at).toISOString().slice(0, 16) : getEndOfMonth(),
+      allow_multiple: vote.allow_multiple,
+      max_selections: vote.max_selections || 1,
+      is_anonymous: vote.is_anonymous,
+      is_active: vote.is_active
+    });
+    setIsWriting(true);
+    
+    setTimeout(() => {
+      if (containerRef.current) {
+        containerRef.current.scrollTop = 0;
+      }
+    }, 100);
+  };
+
+  const handleDelete = async (id) => {
+    const { count } = await supabase
+      .from('vote_responses')
+      .select('*', { count: 'exact', head: true })
+      .eq('vote_id', id);
+
+    const confirmMsg = count > 0
+      ? `이 투표를 삭제하시겠습니까?\n\n⚠️ ${count}명의 참여 기록도 함께 삭제됩니다.`
+      : '이 투표를 삭제하시겠습니까?';
+
+    if (!window.confirm(confirmMsg)) {
+      return;
+    }
+
+    try {
+      const { error } = await supabase
+        .from('votes')
+        .delete()
+        .eq('id', id);
+
+      if (error) throw error;
+      alert('🗑️ 투표가 삭제되었습니다.');
+      loadVotes();
+    } catch (error) {
+      console.error('Delete error:', error);
       alert('삭제 중 오류가 발생했습니다.');
     }
   };
 
-  const calculateFrequency = (visitCount, firstVisit, lastVisit) => {
-    if (visitCount < 2) return '-';
-    
-    const days = Math.floor((new Date(lastVisit) - new Date(firstVisit)) / (1000 * 60 * 60 * 24));
-    const avgDays = days / (visitCount - 1);
-    
-    if (avgDays < 1) return '하루 여러번';
-    if (avgDays < 7) return `약 ${Math.round(avgDays)}일마다`;
-    if (avgDays < 30) return `약 ${Math.round(avgDays / 7)}주마다`;
-    return `약 ${Math.round(avgDays / 30)}개월마다`;
-  };
+  const toggleActive = async (id, currentStatus) => {
+    try {
+      const { error } = await supabase
+        .from('votes')
+        .update({ is_active: !currentStatus })
+        .eq('id', id);
 
-  const parseBirthday = (birthdayStr) => {
-    if (!birthdayStr || birthdayStr === '-') return null;
-    const match = birthdayStr.match(/(\d+)월\s*(\d+)일/);
-    if (match) {
-      return {
-        month: parseInt(match[1]),
-        day: parseInt(match[2])
-      };
+      if (error) throw error;
+      alert(`✅ 투표가 ${!currentStatus ? '활성화' : '종료'}되었습니다.`);
+      loadVotes();
+    } catch (error) {
+      console.error('Toggle active error:', error);
+      alert('상태 변경 중 오류가 발생했습니다.');
     }
-    return null;
   };
 
-  const handleSort = (key) => {
-    let direction = 'asc';
-    if (sortConfig.key === key && sortConfig.direction === 'asc') {
-      direction = 'desc';
+  const viewResults = async (vote) => {
+    try {
+      const { data: responses, error } = await supabase
+        .from('vote_responses')
+        .select(`
+          *,
+          customers (
+            nickname,
+            phone_number
+          )
+        `)
+        .eq('vote_id', vote.id);
+
+      if (error) throw error;
+
+      const optionVotes = {};
+      vote.options.forEach(opt => {
+        optionVotes[opt.id] = 0;
+      });
+
+      responses.forEach(response => {
+        response.selected_options.forEach(optionId => {
+          optionVotes[optionId] = (optionVotes[optionId] || 0) + 1;
+        });
+      });
+
+      const totalVotes = responses.length;
+
+      let resultText = `📊 "${vote.title}" 투표 결과\n\n`;
+      resultText += `전체 참여자: ${totalVotes}명\n\n`;
+      resultText += `─────────────────\n\n`;
+
+      vote.options.forEach(opt => {
+        const count = optionVotes[opt.id] || 0;
+        const percentage = totalVotes > 0 ? ((count / totalVotes) * 100).toFixed(1) : 0;
+        resultText += `${opt.text}\n`;
+        resultText += `${count}표 (${percentage}%)\n`;
+        resultText += `${'█'.repeat(Math.round(percentage / 5))}${'░'.repeat(20 - Math.round(percentage / 5))}\n\n`;
+      });
+
+      if (!vote.is_anonymous && responses.length > 0) {
+        resultText += `\n─────────────────\n\n`;
+        resultText += `📝 참여자 목록:\n\n`;
+        responses.forEach((response, idx) => {
+          const selectedTexts = response.selected_options
+            .map(optId => vote.options.find(o => o.id === optId)?.text)
+            .filter(Boolean)
+            .join(', ');
+          
+          resultText += `${idx + 1}. ${response.customers?.nickname || '알 수 없음'} (${response.customers?.phone_number || '-'})\n`;
+          resultText += `   선택: ${selectedTexts}\n`;
+          resultText += `   ${new Date(response.voted_at).toLocaleString('ko-KR')}\n\n`;
+        });
+      }
+
+      alert(resultText);
+    } catch (error) {
+      console.error('View results error:', error);
+      alert('결과 조회 중 오류가 발생했습니다.');
     }
-    setSortConfig({ key, direction });
   };
 
-  const sortedCustomers = React.useMemo(() => {
-    const sorted = [...customers];
-    
-    sorted.sort((a, b) => {
-      let aValue, bValue;
-
-      switch (sortConfig.key) {
-        case 'nickname':
-          aValue = a.nickname.toLowerCase();
-          bValue = b.nickname.toLowerCase();
-          break;
-        case 'phone_number':
-          aValue = a.phone_number;
-          bValue = b.phone_number;
-          break;
-        case 'birthday':
-          const aBirthday = parseBirthday(a.birthday);
-          const bBirthday = parseBirthday(b.birthday);
-          
-          if (!aBirthday && !bBirthday) return 0;
-          if (!aBirthday) return 1;
-          if (!bBirthday) return -1;
-          
-          if (aBirthday.month !== bBirthday.month) {
-            aValue = aBirthday.month;
-            bValue = bBirthday.month;
-          } else {
-            aValue = aBirthday.day;
-            bValue = bBirthday.day;
-          }
-          break;
-        case 'current_stamps':
-          aValue = a.current_stamps;
-          bValue = b.current_stamps;
-          break;
-        case 'total_stamps':
-          aValue = a.total_stamps;
-          bValue = b.total_stamps;
-          break;
-        case 'coupons':
-          aValue = a.coupons;
-          bValue = b.coupons;
-          break;
-        case 'visit_count':
-          aValue = a.visit_count;
-          bValue = b.visit_count;
-          break;
-        case 'last_visit':
-          aValue = new Date(a.last_visit);
-          bValue = new Date(b.last_visit);
-          break;
-        case 'frequency':
-          const aFreq = a.visit_count < 2 ? 999999 : 
-            Math.floor((new Date(a.last_visit) - new Date(a.first_visit)) / (1000 * 60 * 60 * 24)) / (a.visit_count - 1);
-          const bFreq = b.visit_count < 2 ? 999999 : 
-            Math.floor((new Date(b.last_visit) - new Date(b.first_visit)) / (1000 * 60 * 60 * 24)) / (b.visit_count - 1);
-          aValue = aFreq;
-          bValue = bFreq;
-          break;
-        default:
-          return 0;
-      }
-
-      if (aValue < bValue) {
-        return sortConfig.direction === 'asc' ? -1 : 1;
-      }
-      if (aValue > bValue) {
-        return sortConfig.direction === 'asc' ? 1 : -1;
-      }
-      return 0;
+  const resetForm = () => {
+    setFormData({
+      title: '',
+      description: '',
+      options: ['', ''],
+      ends_at: getEndOfMonth(),
+      allow_multiple: false,
+      max_selections: 1,
+      is_anonymous: false,
+      is_active: true
     });
-
-    return sorted;
-  }, [customers, sortConfig]);
-
-  const getSortIcon = (columnKey) => {
-    if (sortConfig.key !== columnKey) {
-      return ' ⇅';
-    }
-    return sortConfig.direction === 'asc' ? ' ▲' : ' ▼';
+    setIsWriting(false);
+    setEditingVote(null);
   };
+
+  const addOption = () => {
+    setFormData({
+      ...formData,
+      options: [...formData.options, '']
+    });
+  };
+
+  const removeOption = (index) => {
+    if (formData.options.length <= 2) {
+      alert('최소 2개의 선택지가 필요합니다.');
+      return;
+    }
+    const newOptions = formData.options.filter((_, i) => i !== index);
+    setFormData({ ...formData, options: newOptions });
+  };
+
+  const updateOption = (index, value) => {
+    const newOptions = [...formData.options];
+    newOptions[index] = value;
+    setFormData({ ...formData, options: newOptions });
+  };
+
+  const formatDate = (dateStr) => {
+    if (!dateStr) return '-';
+    const date = new Date(dateStr);
+    return date.toLocaleString('ko-KR', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false
+    });
+  };
+
+  const formatDateShort = (dateStr) => {
+    if (!dateStr) return '-';
+    const date = new Date(dateStr);
+    return date.toLocaleDateString('ko-KR', {
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false
+    });
+  };
+
+  const getVoteStatus = (vote) => {
+    const now = new Date();
+    const endsAt = vote.ends_at ? new Date(vote.ends_at) : null;
+    
+    if (!vote.is_active) {
+      return { label: '⏸️ 종료됨', class: 'badge-secondary' };
+    }
+    if (endsAt && endsAt < now) {
+      return { label: '⏰ 마감됨', class: 'badge-warning' };
+    }
+    
+    if (endsAt) {
+      const diffTime = endsAt - now;
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+      
+      if (diffDays <= 1) {
+        return { label: '🔥 마감임박', class: 'badge-warning' };
+      } else if (diffDays <= 7) {
+        return { label: `⏳ D-${diffDays}`, class: 'badge-info' };
+      }
+    }
+    
+    return { label: '✅ 진행중', class: 'badge-success' };
+  };
+
+  const stats = votes.reduce((acc, vote) => {
+    acc.total++;
+    if (vote.is_active) acc.active++;
+    acc.totalResponses += vote.response_count || 0;
+    return acc;
+  }, { total: 0, active: 0, totalResponses: 0 });
 
   return (
-    <div className="admin-view">
-      <div className="admin-header">
-        <h1>📊 관리자 페이지</h1>
-        <button className="btn-close" onClick={onClose}>
-          ✕ 닫기
-        </button>
-      </div>
-
-      <div className="admin-controls">
-        <button className="btn btn-success" onClick={exportToExcel}>
-          💾 엑셀로 저장
-        </button>
-        <button className="btn btn-info" onClick={onShowBirthday}>
-          🎂 생일자 확인
-        </button>
-        <button className="btn btn-info" onClick={onShowCoupon}>
-          🎫 쿠폰 관리
-        </button>
-        <button className="btn btn-info" onClick={onShowNotice}>
-          📢 공지사항 관리
-        </button>
-        <button className="btn btn-info" onClick={onShowVote}>
-          📊 투표 관리
-        </button>
-        <button className="btn btn-info" onClick={onShowStoreRequest}>
-          🏬 매장 제안 관리
-        </button>
-        <button className="btn btn-primary" onClick={clearAllData}>
-          🗑️ 데이터 초기화
-        </button>
+    <div className="notice-management" ref={containerRef}>
+      <div className="notice-header">
+        <h1>📊 투표 관리</h1>
+        <div className="header-buttons">
+          {!isWriting && (
+            <button className="btn btn-success" onClick={() => setIsWriting(true)}>
+              + 새 투표 만들기
+            </button>
+          )}
+          <button className="btn-close" onClick={onBack}>
+            ✕ 닫기
+          </button>
+        </div>
       </div>
 
       <div className="stats">
         <div className="stat-box">
           <div className="stat-number">{stats.total}</div>
-          <div className="stat-label">총 고객 수</div>
+          <div className="stat-label">전체 투표</div>
         </div>
         <div className="stat-box">
-          <div className="stat-number">{stats.totalStamps}</div>
-          <div className="stat-label">누적 스탬프</div>
+          <div className="stat-number">{stats.active}</div>
+          <div className="stat-label">진행중</div>
         </div>
         <div className="stat-box">
-          <div className="stat-number">{stats.totalCoupons}</div>
-          <div className="stat-label">발급된 쿠폰</div>
+          <div className="stat-number">{stats.totalResponses}</div>
+          <div className="stat-label">총 참여 수</div>
         </div>
       </div>
 
-      <h2 style={{ marginBottom: '15px', color: 'gold' }}>고객 데이터 (정렬 가능)</h2>
-      <div className="data-table">
-        <table>
-          <thead>
-            <tr>
-              <th onClick={() => handleSort('nickname')} style={{ cursor: 'pointer' }}>
-                닉네임{getSortIcon('nickname')}
-              </th>
-              <th onClick={() => handleSort('phone_number')} style={{ cursor: 'pointer' }}>
-                전화번호{getSortIcon('phone_number')}
-              </th>
-              <th onClick={() => handleSort('birthday')} style={{ cursor: 'pointer' }}>
-                생일{getSortIcon('birthday')}
-              </th>
-              <th onClick={() => handleSort('current_stamps')} style={{ cursor: 'pointer' }}>
-                현재 스탬프{getSortIcon('current_stamps')}
-              </th>
-              <th onClick={() => handleSort('total_stamps')} style={{ cursor: 'pointer' }}>
-                누적 스탬프{getSortIcon('total_stamps')}
-              </th>
-              <th onClick={() => handleSort('coupons')} style={{ cursor: 'pointer' }}>
-                쿠폰{getSortIcon('coupons')}
-              </th>
-              <th onClick={() => handleSort('visit_count')} style={{ cursor: 'pointer' }}>
-                방문횟수{getSortIcon('visit_count')}
-              </th>
-              <th onClick={() => handleSort('frequency')} style={{ cursor: 'pointer' }}>
-                방문 빈도{getSortIcon('frequency')}
-              </th>
-              <th onClick={() => handleSort('last_visit')} style={{ cursor: 'pointer' }}>
-                최근 방문{getSortIcon('last_visit')}
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {sortedCustomers.length === 0 ? (
+      {isWriting && (
+        <div className="notice-form">
+          <h2>{editingVote ? '투표 수정' : '새 투표 만들기'}</h2>
+          
+          <div className="input-group">
+            <label>투표 제목</label>
+            <input
+              type="text"
+              value={formData.title}
+              onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+              placeholder="투표 제목을 입력하세요"
+            />
+          </div>
+
+          <div className="input-group">
+            <label>설명 (선택)</label>
+            <textarea
+              value={formData.description}
+              onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+              placeholder="투표에 대한 설명을 입력하세요"
+              rows="3"
+            />
+          </div>
+
+          <div className="input-group">
+            <label>선택지</label>
+            {formData.options.map((option, index) => (
+              <div key={index} style={{ display: 'flex', gap: '10px', marginBottom: '10px' }}>
+                <input
+                  type="text"
+                  value={option}
+                  onChange={(e) => updateOption(index, e.target.value)}
+                  placeholder={`선택지 ${index + 1}`}
+                  style={{ flex: 1 }}
+                />
+                {formData.options.length > 2 && (
+                  <button
+                    className="btn btn-warning"
+                    onClick={() => removeOption(index)}
+                    style={{ width: 'auto', padding: '10px 15px' }}
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
+            ))}
+            <button
+              className="btn btn-info"
+              onClick={addOption}
+              style={{ width: 'auto', padding: '10px 20px', marginTop: '10px' }}
+            >
+              + 선택지 추가
+            </button>
+          </div>
+
+          <div className="checkbox-group">
+            <label>
+              <input
+                type="checkbox"
+                checked={formData.allow_multiple}
+                onChange={(e) => setFormData({ 
+                  ...formData, 
+                  allow_multiple: e.target.checked,
+                  max_selections: e.target.checked ? 2 : 1
+                })}
+              />
+              <span>☑️ 복수 선택 허용</span>
+            </label>
+          </div>
+
+          {formData.allow_multiple && (
+            <div className="input-group">
+              <label>최대 선택 가능 수</label>
+              <input
+                type="number"
+                value={formData.max_selections}
+                onChange={(e) => setFormData({ 
+                  ...formData, 
+                  max_selections: Math.max(1, parseInt(e.target.value) || 1)
+                })}
+                min="1"
+                max={formData.options.filter(opt => opt.trim()).length}
+              />
+            </div>
+          )}
+
+          <div className="checkbox-group">
+            <label>
+              <input
+                type="checkbox"
+                checked={formData.is_anonymous}
+                onChange={(e) => setFormData({ ...formData, is_anonymous: e.target.checked })}
+              />
+              <span>🎭 익명 투표</span>
+            </label>
+          </div>
+
+          <div className="input-group">
+            <label>마감 시간 (기본값: 이번 달 말일 23:59)</label>
+            <input
+              type="datetime-local"
+              value={formData.ends_at}
+              onChange={(e) => setFormData({ ...formData, ends_at: e.target.value })}
+              min={new Date().toISOString().slice(0, 16)}
+            />
+            <div style={{ fontSize: '12px', color: '#e0b0ff', marginTop: '5px' }}>
+              💡 현재 설정: {formData.ends_at ? new Date(formData.ends_at).toLocaleString('ko-KR', {
+                year: 'numeric',
+                month: 'long',
+                day: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit'
+              }) : '설정 안 됨'}
+            </div>
+          </div>
+
+          <div className="checkbox-group">
+            <label>
+              <input
+                type="checkbox"
+                checked={formData.is_active}
+                onChange={(e) => setFormData({ ...formData, is_active: e.target.checked })}
+              />
+              <span>✅ 즉시 활성화</span>
+            </label>
+          </div>
+
+          <div className="form-buttons">
+            <button className="btn btn-primary" onClick={handleSubmit}>
+              {editingVote ? '수정하기' : '만들기'}
+            </button>
+            <button className="btn btn-warning" onClick={resetForm}>
+              취소
+            </button>
+          </div>
+        </div>
+      )}
+
+      {loading ? (
+        <div className="loading">로딩 중...</div>
+      ) : votes.length === 0 ? (
+        <div className="empty-state">
+          <div className="empty-icon">🔭</div>
+          <h3>등록된 투표가 없습니다</h3>
+          <p>새 투표를 만들어보세요!</p>
+        </div>
+      ) : (
+        <div className="notice-list">
+          <table>
+            <thead>
               <tr>
-                <td colSpan="9" style={{ textAlign: 'center', color: '#e0b0ff' }}>
-                  등록된 고객이 없습니다
-                </td>
+                <th>상태</th>
+                <th>제목</th>
+                <th>참여자</th>
+                <th>선택지 수</th>
+                <th>생성일</th>
+                <th>마감일</th>
+                <th>관리</th>
               </tr>
-            ) : (
-              sortedCustomers.map((customer) => (
-                <tr key={customer.id}>
-                  <td>{customer.nickname}</td>
-                  <td>{customer.phone_number}</td>
-                  <td>{customer.birthday || '-'}</td>
-                  <td>
-                    {customer.current_stamps >= 10 ? (
-                      <span className="badge badge-success">완료</span>
-                    ) : (
-                      <span className="badge badge-warning">{customer.current_stamps}/10</span>
-                    )}
-                  </td>
-                  <td>{customer.total_stamps}</td>
-                  <td>{customer.coupons}개</td>
-                  <td>{customer.visit_count}회</td>
-                  <td>
-                    <strong>
-                      {calculateFrequency(customer.visit_count, customer.first_visit, customer.last_visit)}
-                    </strong>
-                  </td>
-                  <td>
-                    {new Date(customer.last_visit).toLocaleString('ko-KR', {
-                      year: 'numeric',
-                      month: '2-digit',
-                      day: '2-digit',
-                      hour: '2-digit',
-                      minute: '2-digit',
-                      hour12: false
-                    }).replace(/\. /g, '-').replace('.', '')}
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
+            </thead>
+            <tbody>
+              {votes.map((vote) => {
+                const status = getVoteStatus(vote);
+                return (
+                  <tr key={vote.id}>
+                    <td>
+                      <span className={`badge ${status.class}`}>
+                        {status.label}
+                      </span>
+                    </td>
+                    <td className="notice-title-cell">
+                      {vote.title}
+                      {vote.allow_multiple && (
+                        <span style={{ fontSize: '12px', color: '#e0b0ff', marginLeft: '5px' }}>
+                          (복수선택)
+                        </span>
+                      )}
+                      {vote.is_anonymous && (
+                        <span style={{ fontSize: '12px', color: '#e0b0ff', marginLeft: '5px' }}>
+                          (익명)
+                        </span>
+                      )}
+                    </td>
+                    <td>
+                      <strong style={{ color: 'gold', fontSize: '16px' }}>
+                        {vote.response_count || 0}
+                      </strong>명
+                    </td>
+                    <td>{vote.options.length}개</td>
+                    <td>{formatDateShort(vote.created_at)}</td>
+                    <td>
+                      {vote.ends_at ? (
+                        <div>
+                          <div style={{ 
+                            color: new Date(vote.ends_at) < new Date() ? '#ffcccb' : '#90EE90',
+                            fontWeight: 'bold',
+                            marginBottom: '3px'
+                          }}>
+                            {formatDateShort(vote.ends_at)}
+                          </div>
+                          <div style={{ 
+                            fontSize: '11px', 
+                            color: '#e0b0ff',
+                            opacity: 0.8
+                          }}>
+                            {(() => {
+                              const now = new Date();
+                              const endsAt = new Date(vote.ends_at);
+                              if (endsAt < now) {
+                                return '마감됨';
+                              }
+                              const diffTime = endsAt - now;
+                              const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                              if (diffDays === 0) {
+                                return '오늘 마감';
+                              } else if (diffDays === 1) {
+                                return '내일 마감';
+                              } else {
+                                return `${diffDays}일 남음`;
+                              }
+                            })()}
+                          </div>
+                        </div>
+                      ) : (
+                        <span style={{ color: '#90EE90' }}>무제한</span>
+                      )}
+                    </td>
+                    <td>
+                      <div className="action-buttons">
+                        <button 
+                          className="btn-publish"
+                          onClick={() => viewResults(vote)}
+                          title="결과 보기"
+                          style={{ fontSize: '14px' }}
+                        >
+                          📊
+                        </button>
+                        <button 
+                          className="btn-edit"
+                          onClick={() => toggleActive(vote.id, vote.is_active)}
+                          title={vote.is_active ? '종료하기' : '재활성화'}
+                        >
+                          {vote.is_active ? '⏸️' : '▶️'}
+                        </button>
+                        <button 
+                          className="btn-edit"
+                          onClick={() => handleEdit(vote)}
+                          title="수정"
+                        >
+                          ✏️
+                        </button>
+                        <button 
+                          className="btn-delete"
+                          onClick={() => handleDelete(vote.id)}
+                          title="삭제"
+                        >
+                          🗑️
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }
 
-export default AdminView;
+export default VoteManagement;
