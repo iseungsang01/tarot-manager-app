@@ -18,7 +18,9 @@ body {
   align-items: center;
 }
 
-/* 관리자 버튼 */
+/* ========================================
+   관리자 버튼
+======================================== */
 .admin-btn {
   position: fixed;
   bottom: 20px;
@@ -41,7 +43,9 @@ body {
   box-shadow: 0 0 30px rgba(255, 215, 0, 0.6);
 }
 
-/* 고객 화면 */
+/* ========================================
+   고객 화면
+======================================== */
 .customer-view {
   background: linear-gradient(135deg, #1a0033 0%, #2d004d 100%);
   border: 3px solid gold;
@@ -68,6 +72,9 @@ body {
   font-style: italic;
 }
 
+/* ========================================
+   입력 그룹
+======================================== */
 .input-group {
   margin-bottom: 20px;
 }
@@ -80,23 +87,33 @@ body {
 }
 
 .input-group input,
-.input-group select {
+.input-group select,
+.input-group textarea {
   width: 100%;
   padding: 15px;
   border: 2px solid #8a2be2;
   border-radius: 10px;
   font-size: 16px;
   background: rgba(255, 255, 255, 0.9);
+  font-family: inherit;
 }
 
 .input-group input:focus,
-.input-group select:focus {
+.input-group select:focus,
+.input-group textarea:focus {
   outline: none;
   border-color: gold;
   box-shadow: 0 0 10px rgba(255, 215, 0, 0.3);
 }
 
-/* 버튼 */
+.input-group textarea {
+  resize: vertical;
+  min-height: 150px;
+}
+
+/* ========================================
+   버튼
+======================================== */
 .btn {
   width: 100%;
   padding: 15px;
@@ -142,7 +159,57 @@ body {
   cursor: not-allowed;
 }
 
-/* 메시지 */
+.btn-close {
+  padding: 10px 20px;
+  background: #8a2be2;
+  color: gold;
+  border: 2px solid gold;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.btn-edit,
+.btn-delete,
+.btn-publish {
+  padding: 6px 12px;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 16px;
+  transition: all 0.3s;
+}
+
+.btn-edit {
+  background: rgba(138, 43, 226, 0.3);
+  border: 2px solid #8a2be2;
+}
+
+.btn-edit:hover {
+  background: rgba(138, 43, 226, 0.5);
+}
+
+.btn-delete {
+  background: rgba(220, 53, 69, 0.3);
+  border: 2px solid #dc3545;
+}
+
+.btn-delete:hover {
+  background: rgba(220, 53, 69, 0.5);
+}
+
+.btn-publish {
+  background: rgba(23, 162, 184, 0.3);
+  border: 2px solid #17a2b8;
+}
+
+.btn-publish:hover {
+  background: rgba(23, 162, 184, 0.5);
+}
+
+/* ========================================
+   메시지
+======================================== */
 .message {
   padding: 15px;
   border-radius: 10px;
@@ -164,7 +231,9 @@ body {
   border: 2px solid #dc3545;
 }
 
-/* 스탬프 카드 */
+/* ========================================
+   스탬프 카드
+======================================== */
 .stamp-display-wrapper {
   margin-top: 20px;
 }
@@ -266,7 +335,9 @@ body {
   color: white;
 }
 
-/* 관리자 화면 */
+/* ========================================
+   관리자 화면
+======================================== */
 .admin-view {
   background: linear-gradient(135deg, #1a0033 0%, #2d004d 100%);
   border: 3px solid gold;
@@ -292,16 +363,6 @@ body {
   color: gold;
 }
 
-.btn-close {
-  padding: 10px 20px;
-  background: #8a2be2;
-  color: gold;
-  border: 2px solid gold;
-  border-radius: 8px;
-  cursor: pointer;
-  font-weight: 600;
-}
-
 .admin-controls {
   display: flex;
   gap: 10px;
@@ -315,6 +376,9 @@ body {
   font-size: 16px;
 }
 
+/* ========================================
+   통계 박스
+======================================== */
 .stats {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -344,6 +408,9 @@ body {
   margin-top: 5px;
 }
 
+/* ========================================
+   테이블
+======================================== */
 .data-table {
   width: 100%;
   overflow-x: auto;
@@ -375,6 +442,9 @@ tr:hover {
   background: rgba(138, 43, 226, 0.1);
 }
 
+/* ========================================
+   배지
+======================================== */
 .badge {
   display: inline-block;
   padding: 4px 8px;
@@ -413,7 +483,9 @@ tr:hover {
   border: 1px solid #5cb85c;
 }
 
-/* 생일자 확인 */
+/* ========================================
+   생일자 확인
+======================================== */
 .birthday-view {
   width: 100%;
   max-width: 1200px;
@@ -501,14 +573,9 @@ tr:hover {
   text-align: center;
 }
 
-.empty-message {
-  text-align: center;
-  color: #e0b0ff;
-  font-size: 18px;
-  padding: 40px;
-}
-
-/* 공지사항 관리 */
+/* ========================================
+   공지사항 / 투표 관리
+======================================== */
 .notice-management {
   background: linear-gradient(135deg, #1a0033 0%, #2d004d 100%);
   border: 3px solid gold;
@@ -626,46 +693,28 @@ tr:hover {
   display: flex;
   gap: 8px;
   justify-content: center;
+  flex-wrap: wrap;
 }
 
-.btn-edit,
-.btn-delete,
-.btn-publish {
-  padding: 6px 12px;
-  border: none;
-  border-radius: 6px;
-  cursor: pointer;
-  font-size: 16px;
-  transition: all 0.3s;
+/* ========================================
+   매장 제안 관리
+======================================== */
+.store-request-view {
+  background: linear-gradient(135deg, #1a0033 0%, #2d004d 100%);
+  border: 3px solid gold;
+  border-radius: 20px;
+  box-shadow: 0 20px 60px rgba(255, 215, 0, 0.3);
+  padding: 40px;
+  max-width: 1200px;
+  width: 100%;
+  max-height: 90vh;
+  overflow-y: auto;
+  color: white;
 }
 
-.btn-edit {
-  background: rgba(138, 43, 226, 0.3);
-  border: 2px solid #8a2be2;
-}
-
-.btn-edit:hover {
-  background: rgba(138, 43, 226, 0.5);
-}
-
-.btn-delete {
-  background: rgba(220, 53, 69, 0.3);
-  border: 2px solid #dc3545;
-}
-
-.btn-delete:hover {
-  background: rgba(220, 53, 69, 0.5);
-}
-
-.btn-publish {
-  background: rgba(23, 162, 184, 0.3);
-  border: 2px solid #17a2b8;
-}
-
-.btn-publish:hover {
-  background: rgba(23, 162, 184, 0.5);
-}
-
+/* ========================================
+   빈 상태 / 로딩
+======================================== */
 .empty-state {
   text-align: center;
   padding: 60px 40px;
@@ -687,6 +736,13 @@ tr:hover {
   font-size: 16px;
 }
 
+.empty-message {
+  text-align: center;
+  color: #e0b0ff;
+  font-size: 18px;
+  padding: 40px;
+}
+
 .loading {
   text-align: center;
   color: #e0b0ff;
@@ -694,45 +750,9 @@ tr:hover {
   padding: 40px;
 }
 
-/* 반응형 */
-@media (max-width: 768px) {
-  .stats {
-    grid-template-columns: 1fr;
-  }
-  
-  .birthday-grid {
-    grid-template-columns: 1fr;
-  }
-  
-  .admin-controls {
-    flex-direction: column;
-  }
-  
-  .admin-controls .btn {
-    width: 100%;
-  }
-  
-  .notice-header {
-    flex-direction: column;
-    gap: 15px;
-  }
-  
-  .header-buttons {
-    flex-direction: column;
-    width: 100%;
-  }
-  
-  .header-buttons .btn,
-  .header-buttons .btn-close {
-    width: 100%;
-  }
-  
-  .action-buttons {
-    flex-wrap: wrap;
-  }
-}
-
-/* 모달 */
+/* ========================================
+   모달
+======================================== */
 .modal-overlay {
   position: fixed;
   top: 0;
@@ -771,21 +791,36 @@ tr:hover {
   line-height: 1.6;
 }
 
-.store-request-view {
-  background: linear-gradient(135deg, #1a0033 0%, #2d004d 100%);
-  border: 3px solid gold;
-  border-radius: 20px;
-  box-shadow: 0 20px 60px rgba(255, 215, 0, 0.3);
-  padding: 40px;
-  max-width: 1200px;
-  width: 100%;
-  max-height: 90vh;
-  overflow-y: auto;
-  color: white;
+/* ========================================
+   필터 버튼
+======================================== */
+.filter-buttons {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
 }
 
-/* 반응형 */
+.filter-buttons .btn {
+  width: auto;
+  padding: 10px 20px;
+}
+
+/* ========================================
+   반응형 디자인
+======================================== */
 @media (max-width: 768px) {
+  .App {
+    padding: 10px;
+  }
+
+  .customer-view,
+  .admin-view,
+  .notice-management,
+  .store-request-view {
+    padding: 20px;
+  }
+
   .stats {
     grid-template-columns: 1fr;
   }
@@ -819,9 +854,63 @@ tr:hover {
   
   .action-buttons {
     flex-wrap: wrap;
+    justify-content: flex-start;
   }
   
   .modal-content {
     padding: 20px;
+  }
+
+  .stamp-grid {
+    grid-template-columns: repeat(5, 1fr);
+    gap: 8px;
+  }
+
+  .stamp {
+    font-size: 20px;
+  }
+
+  .customer-view h1 {
+    font-size: 24px;
+  }
+
+  .filter-buttons {
+    flex-direction: column;
+  }
+
+  .filter-buttons .btn {
+    width: 100%;
+  }
+
+  table {
+    font-size: 12px;
+  }
+
+  th, td {
+    padding: 8px;
+  }
+}
+
+@media (max-width: 480px) {
+  .admin-btn {
+    width: 40px;
+    height: 40px;
+    font-size: 20px;
+  }
+
+  .stat-number {
+    font-size: 28px;
+  }
+
+  .stat-label {
+    font-size: 12px;
+  }
+
+  .birthday-icon {
+    font-size: 30px;
+  }
+
+  .empty-icon {
+    font-size: 60px;
   }
 }

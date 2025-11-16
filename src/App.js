@@ -5,6 +5,7 @@ import BirthdayView from './components/BirthdayView';
 import NoticeManagement from './components/NoticeManagement';
 import StoreRequestView from './components/StoreRequestView';
 import CouponManagement from './components/CouponManagement';
+import VoteManagement from './components/VoteManagement';
 import './App.css';
 
 function App() {
@@ -37,6 +38,10 @@ function App() {
     setCurrentView('coupon');
   };
 
+  const showVoteManagement = () => {
+    setCurrentView('vote');
+  };
+
   const backToCustomer = () => {
     setCurrentView('customer');
     setIsAdminAuthenticated(false);
@@ -60,6 +65,7 @@ function App() {
           onShowNotice={showNoticeManagement}
           onShowStoreRequest={showStoreRequestView}
           onShowCoupon={showCouponManagement}
+          onShowVote={showVoteManagement}
         />
       )}
       
@@ -77,6 +83,10 @@ function App() {
 
       {currentView === 'coupon' && (
         <CouponManagement onBack={() => setCurrentView('admin')} />
+      )}
+
+      {currentView === 'vote' && (
+        <VoteManagement onBack={() => setCurrentView('admin')} />
       )}
     </div>
   );
