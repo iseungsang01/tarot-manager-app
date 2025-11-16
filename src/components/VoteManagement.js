@@ -324,39 +324,44 @@ function VoteManagement({ onBack }) {
 
   const formatDate = (dateStr) => {
     if (!dateStr) return '-';
-    const date = new Date(dateStr);
+    // UTC 시간을 KST로 변환 (+9시간)
+    const utcDate = new Date(dateStr);
+    const kstDate = new Date(utcDate.getTime() + (9 * 60 * 60 * 1000));
     
-    // 한국 시간으로 변환하여 표시
-    return date.toLocaleString('ko-KR', {
+    return kstDate.toLocaleString('ko-KR', {
       year: 'numeric',
       month: 'long',
       day: 'numeric',
       hour: '2-digit',
       minute: '2-digit',
-      hour12: false,
-      timeZone: 'Asia/Seoul'
+      hour12: false
     });
   };
 
   const formatDateShort = (dateStr) => {
     if (!dateStr) return '-';
-    const date = new Date(dateStr);
+    // UTC 시간을 KST로 변환 (+9시간)
+    const utcDate = new Date(dateStr);
+    const kstDate = new Date(utcDate.getTime() + (9 * 60 * 60 * 1000));
     
-    // 한국 시간으로 변환하여 표시
-    return date.toLocaleString('ko-KR', {
+    const formatted = kstDate.toLocaleString('ko-KR', {
+      year: 'numeric',
       month: '2-digit',
       day: '2-digit',
       hour: '2-digit',
       minute: '2-digit',
-      hour12: false,
-      timeZone: 'Asia/Seoul'
+      hour12: false
     });
+    
+    // "2024. 11. 30. 23:59" 형식을 "11. 30. 23:59"로 변환
+    return formatted.replace(/^\d{4}\.\s*/, '');
   };
 
   const getVoteStatus = (vote) => {
-    // 한국 시간 기준으로 현재 시간
+    // 현재 시간을 KST로 변환
     const now = new Date();
-    const kstNow = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Seoul' }));
+    const kstNow = new Date(now.getTime() + (9 * 60 * 60 * 1000));
+    
     const endsAt = vote.ends_at ? new Date(vote.ends_at) : null;
     
     if (!vote.is_active) {
@@ -624,9 +629,9 @@ function VoteManagement({ onBack }) {
                             opacity: 0.8
                           }}>
                             {(() => {
-                              // 한국 시간 기준
+                              // 현재 시간을 KST로 변환
                               const now = new Date();
-                              const kstNow = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Seoul' }));
+                              const kstNow = new Date(now.getTime() + (9 * 60 * 60 * 1000));
                               const endsAt = new Date(vote.ends_at);
                               
                               if (endsAt < kstNow) {
