@@ -336,6 +336,18 @@ function VoteManagement({ onBack }) {
     const date = new Date(dateStr);
     return date.toLocaleString('ko-KR', {
       year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false
+    });
+  };
+
+  const formatDateShort = (dateStr) => {
+    if (!dateStr) return '-';
+    const date = new Date(dateStr);
+    return date.toLocaleDateString('ko-KR', {
       month: '2-digit',
       day: '2-digit',
       hour: '2-digit',
