@@ -18,8 +18,26 @@ function VoteManagement({ onBack }) {
   });
   const containerRef = React.useRef(null);
 
+  // 이번 달 말일 23:59 구하기
+  const getEndOfMonth = () => {
+    const now = new Date();
+    const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+    lastDay.setHours(23, 59, 0, 0);
+    
+    const year = lastDay.getFullYear();
+    const month = String(lastDay.getMonth() + 1).padStart(2, '0');
+    const day = String(lastDay.getDate()).padStart(2, '0');
+    
+    return `${year}-${month}-${day}T23:59`;
+  };
+
   useEffect(() => {
     loadVotes();
+    // 컴포넌트 마운트 시 기본값 설정
+    setFormData(prev => ({
+      ...prev,
+      ends_at: getEndOfMonth()
+    }));
   }, []);
 
   const loadVotes = useCallback(async () => {
@@ -139,7 +157,7 @@ function VoteManagement({ onBack }) {
       title: vote.title,
       description: vote.description || '',
       options: options,
-      ends_at: vote.ends_at ? new Date(vote.ends_at).toISOString().slice(0, 16) : '',
+      ends_at: vote.ends_at ? new Date(vote.ends_at).toISOString().slice(0, 16) : getEndOfMonth(),
       allow_multiple: vote.allow_multiple,
       max_selections: vote.max_selections || 1,
       is_anonymous: vote.is_anonymous,
@@ -263,12 +281,25 @@ function VoteManagement({ onBack }) {
     }
   };
 
+  // 이번 달 말일 23:59 구하기
+  const getEndOfMonth = () => {
+    const now = new Date();
+    const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+    lastDay.setHours(23, 59, 0, 0);
+    
+    const year = lastDay.getFullYear();
+    const month = String(lastDay.getMonth() + 1).padStart(2, '0');
+    const day = String(lastDay.getDate()).padStart(2, '0');
+    
+    return `${year}-${month}-${day}T23:59`;
+  };
+
   const resetForm = () => {
     setFormData({
       title: '',
       description: '',
       options: ['', ''],
-      ends_at: '',
+      ends_at: getEndOfMonth(),
       allow_multiple: false,
       max_selections: 1,
       is_anonymous: false,
@@ -459,13 +490,22 @@ function VoteManagement({ onBack }) {
           </div>
 
           <div className="input-group">
-            <label>마감 시간 (선택)</label>
+            <label>마감 시간 (기본값: 이번 달 말일 23:59)</label>
             <input
               type="datetime-local"
               value={formData.ends_at}
               onChange={(e) => setFormData({ ...formData, ends_at: e.target.value })}
               min={new Date().toISOString().slice(0, 16)}
             />
+            <div style={{ fontSize: '12px', color: '#e0b0ff', marginTop: '5px' }}>
+              💡 현재 설정: {formData.ends_at ? new Date(formData.ends_at).toLocaleString('ko-KR', {
+                year: 'numeric',
+                month: 'long',
+                day: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit'
+              }) : '설정 안 됨'}
+            </div>
           </div>
 
           <div className="checkbox-group">
