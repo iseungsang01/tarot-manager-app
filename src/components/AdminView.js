@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
 import * as XLSX from 'xlsx';
 
-function AdminView({ onClose, onShowBirthday, onShowNotice, onShowCoupon, onShowStoreRequest }) {
+function AdminView({ onClose, onShowBirthday, onShowNotice, onShowCoupon, onShowStoreRequest, onShowVote }) {
   const [customers, setCustomers] = useState([]);
   const [stats, setStats] = useState({ total: 0, totalStamps: 0, totalCoupons: 0 });
   const [sortConfig, setSortConfig] = useState({ key: 'last_visit', direction: 'desc' });
@@ -84,7 +84,6 @@ function AdminView({ onClose, onShowBirthday, onShowNotice, onShowCoupon, onShow
     return `약 ${Math.round(avgDays / 30)}개월마다`;
   };
 
-  // 생일 파싱 함수
   const parseBirthday = (birthdayStr) => {
     if (!birthdayStr || birthdayStr === '-') return null;
     const match = birthdayStr.match(/(\d+)월\s*(\d+)일/);
@@ -97,7 +96,6 @@ function AdminView({ onClose, onShowBirthday, onShowNotice, onShowCoupon, onShow
     return null;
   };
 
-  // 정렬 함수
   const handleSort = (key) => {
     let direction = 'asc';
     if (sortConfig.key === key && sortConfig.direction === 'asc') {
@@ -106,7 +104,6 @@ function AdminView({ onClose, onShowBirthday, onShowNotice, onShowCoupon, onShow
     setSortConfig({ key, direction });
   };
 
-  // 정렬된 고객 데이터
   const sortedCustomers = React.useMemo(() => {
     const sorted = [...customers];
     
@@ -126,12 +123,10 @@ function AdminView({ onClose, onShowBirthday, onShowNotice, onShowCoupon, onShow
           const aBirthday = parseBirthday(a.birthday);
           const bBirthday = parseBirthday(b.birthday);
           
-          // 생일이 없는 경우 맨 뒤로
           if (!aBirthday && !bBirthday) return 0;
           if (!aBirthday) return 1;
           if (!bBirthday) return -1;
           
-          // 월 기준 정렬, 같은 월이면 일 기준 정렬
           if (aBirthday.month !== bBirthday.month) {
             aValue = aBirthday.month;
             bValue = bBirthday.month;
@@ -184,7 +179,6 @@ function AdminView({ onClose, onShowBirthday, onShowNotice, onShowCoupon, onShow
     return sorted;
   }, [customers, sortConfig]);
 
-  // 정렬 아이콘 표시
   const getSortIcon = (columnKey) => {
     if (sortConfig.key !== columnKey) {
       return ' ⇅';
@@ -213,6 +207,9 @@ function AdminView({ onClose, onShowBirthday, onShowNotice, onShowCoupon, onShow
         </button>
         <button className="btn btn-info" onClick={onShowNotice}>
           📢 공지사항 관리
+        </button>
+        <button className="btn btn-info" onClick={onShowVote}>
+          📊 투표 관리
         </button>
         <button className="btn btn-info" onClick={onShowStoreRequest}>
           🏬 매장 제안 관리
