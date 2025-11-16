@@ -21,11 +21,11 @@ function VoteManagement({ onBack }) {
   // 이번 달 말일 23:59 구하기
   const getEndOfMonth = () => {
     const now = new Date();
-    const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-    lastDay.setHours(23, 59, 0, 0);
+    const lastDay = new Date(now.getFullYear(), now.getMonth(), 0);
+    lastDay.setHours(15, 59, 0, 0);
     
     const year = lastDay.getFullYear();
-    const month = String(lastDay.getMonth()).padStart(2, '0');
+    const month = String(lastDay.getMonth() + 1).padStart(2, '0');
     const day = String(lastDay.getDate()).padStart(2, '0');
     
     return `${year}-${month}-${day}T23:59`;
