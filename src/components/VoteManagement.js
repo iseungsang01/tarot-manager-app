@@ -22,7 +22,7 @@ function VoteManagement({ onBack }) {
   const getEndOfMonth = () => {
     const now = new Date();
     const lastDay = new Date(now.getFullYear(), now.getMonth(), 0);
-    lastDay.setHours(15, 59, 0, 0);
+    lastDay.setHours(23, 59, 0, 0);
     
     const year = lastDay.getFullYear();
     const month = String(lastDay.getMonth() + 1).padStart(2, '0');
