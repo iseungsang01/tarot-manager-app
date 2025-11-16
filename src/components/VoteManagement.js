@@ -18,24 +18,17 @@ function VoteManagement({ onBack }) {
   });
   const containerRef = React.useRef(null);
 
-  // 이번 달 말일 23:59 구하기 (한국 시간 기준)
+  // 이번 달 말일 23:59 구하기
   const getEndOfMonth = () => {
-    // 한국 시간 기준으로 현재 날짜 가져오기
-    const kstOffset = 9 * 60; // KST는 UTC+9
     const now = new Date();
-    const kstTime = new Date(now.getTime() + (kstOffset * 60 * 1000));
+    const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+    lastDay.setHours(23, 59, 0, 0);
     
-    // 한국 시간 기준 이번 달 마지막 날
-    const year = kstTime.getUTCFullYear();
-    const month = kstTime.getUTCMonth();
-    const lastDay = new Date(Date.UTC(year, month + 1, 0, 23, 59, 0, 0));
+    const year = lastDay.getFullYear();
+    const month = String(lastDay.getMonth()).padStart(2, '0');
+    const day = String(lastDay.getDate()).padStart(2, '0');
     
-    // datetime-local input은 로컬 시간을 사용하므로 변환
-    const localYear = lastDay.getFullYear();
-    const localMonth = String(lastDay.getMonth() + 1).padStart(2, '0');
-    const localDay = String(lastDay.getDate()).padStart(2, '0');
-    
-    return `${localYear}-${localMonth}-${localDay}T23:59`;
+    return `${year}-${month}-${day}T23:59`;
   };
 
   useEffect(() => {
@@ -324,11 +317,8 @@ function VoteManagement({ onBack }) {
 
   const formatDate = (dateStr) => {
     if (!dateStr) return '-';
-    // UTC 시간을 KST로 변환 (+9시간)
-    const utcDate = new Date(dateStr);
-    const kstDate = new Date(utcDate.getTime() + (9 * 60 * 60 * 1000));
-    
-    return kstDate.toLocaleString('ko-KR', {
+    const date = new Date(dateStr);
+    return date.toLocaleString('ko-KR', {
       year: 'numeric',
       month: 'long',
       day: 'numeric',
@@ -340,39 +330,29 @@ function VoteManagement({ onBack }) {
 
   const formatDateShort = (dateStr) => {
     if (!dateStr) return '-';
-    // UTC 시간을 KST로 변환 (+9시간)
-    const utcDate = new Date(dateStr);
-    const kstDate = new Date(utcDate.getTime() + (9 * 60 * 60 * 1000));
-    
-    const formatted = kstDate.toLocaleString('ko-KR', {
-      year: 'numeric',
+    const date = new Date(dateStr);
+    return date.toLocaleDateString('ko-KR', {
       month: '2-digit',
       day: '2-digit',
       hour: '2-digit',
       minute: '2-digit',
       hour12: false
     });
-    
-    // "2024. 11. 30. 23:59" 형식을 "11. 30. 23:59"로 변환
-    return formatted.replace(/^\d{4}\.\s*/, '');
   };
 
   const getVoteStatus = (vote) => {
-    // 현재 시간을 KST로 변환
     const now = new Date();
-    const kstNow = new Date(now.getTime() + (9 * 60 * 60 * 1000));
-    
     const endsAt = vote.ends_at ? new Date(vote.ends_at) : null;
     
     if (!vote.is_active) {
       return { label: '⏸️ 종료됨', class: 'badge-secondary' };
     }
-    if (endsAt && endsAt < kstNow) {
+    if (endsAt && endsAt < now) {
       return { label: '⏰ 마감됨', class: 'badge-warning' };
     }
     
     if (endsAt) {
-      const diffTime = endsAt - kstNow;
+      const diffTime = endsAt - now;
       const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
       
       if (diffDays <= 1) {
@@ -629,15 +609,12 @@ function VoteManagement({ onBack }) {
                             opacity: 0.8
                           }}>
                             {(() => {
-                              // 현재 시간을 KST로 변환
                               const now = new Date();
-                              const kstNow = new Date(now.getTime() + (9 * 60 * 60 * 1000));
                               const endsAt = new Date(vote.ends_at);
-                              
-                              if (endsAt < kstNow) {
+                              if (endsAt < now) {
                                 return '마감됨';
                               }
-                              const diffTime = endsAt - kstNow;
+                              const diffTime = endsAt - now;
                               const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
                               if (diffDays === 0) {
                                 return '오늘 마감';
