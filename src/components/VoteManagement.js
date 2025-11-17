@@ -1,47 +1,65 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
 
-function VoteManagement({ onBack }) {
+function VoteManagement() {
   const [votes, setVotes] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [isWriting, setIsWriting] = useState(false);
+  const [showForm, setShowForm] = useState(false);
   const [editingVote, setEditingVote] = useState(null);
+  const [showResults, setShowResults] = useState(null);
+  const [voteResults, setVoteResults] = useState(null);
+  
   const [formData, setFormData] = useState({
     title: '',
     description: '',
     options: ['', ''],
-    ends_at: '',
+    ends_at: getEndOfMonth(),
     allow_multiple: false,
     max_selections: 1,
-    is_anonymous: false,
-    is_active: true
+    is_anonymous: false
   });
-  const containerRef = React.useRef(null);
 
-  // 이번 달 말일 23:59 구하기
-  const getEndOfMonth = () => {
+  const [message, setMessage] = useState({ text: '', type: '' });
+
+  function getEndOfMonth() {
     const now = new Date();
-    const lastDay = new Date(now.getFullYear(), now.getMonth(), 0);
-    lastDay.setHours(23, 59, 0, 0);
-    
-    const year = lastDay.getFullYear();
-    const month = String(lastDay.getMonth() + 1).padStart(2, '0');
-    const day = String(lastDay.getDate()).padStart(2, '0');
-    
-    return `${year}-${month}-${day}T23:59`;
-  };
+    const year = now.getFullYear();
+    const month = now.getMonth();
+    const endOfMonth = new Date(year, month + 1, 0, 23, 59, 59);
+    return `${endOfMonth.getFullYear()}-${String(endOfMonth.getMonth() + 1).padStart(2, '0')}-${String(endOfMonth.getDate()).padStart(2, '0')}T23:59`;
+  }
+
+  function kstToGmt(kstDateString) {
+    const kstDate = new Date(kstDateString);
+    const gmtDate = new Date(kstDate.getTime() - (9 * 60 * 60 * 1000));
+    return gmtDate.toISOString();
+  }
+
+  function gmtToKst(gmtDateString) {
+    const gmtDate = new Date(gmtDateString);
+    const kstDate = new Date(gmtDate.getTime() + (9 * 60 * 60 * 1000));
+    return `${kstDate.getFullYear()}-${String(kstDate.getMonth() + 1).padStart(2, '0')}-${String(kstDate.getDate()).padStart(2, '0')}T${String(kstDate.getHours()).padStart(2, '0')}:${String(kstDate.getMinutes()).padStart(2, '0')}`;
+  }
+
+  function formatDate(gmtDateString) {
+    if (!gmtDateString) return '무제한';
+    const gmtDate = new Date(gmtDateString);
+    const kstDate = new Date(gmtDate.getTime() + (9 * 60 * 60 * 1000));
+    return kstDate.toLocaleString('ko-KR', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      timeZone: 'Asia/Seoul'
+    });
+  }
 
   useEffect(() => {
     loadVotes();
-    // 컴포넌트 마운트 시 기본값 설정
-    setFormData(prev => ({
-      ...prev,
-      ends_at: getEndOfMonth()
-    }));
   }, []);
 
-  const loadVotes = useCallback(async () => {
-    setLoading(true);
+  const loadVotes = async () => {
     try {
       const { data, error } = await supabase
         .from('votes')
@@ -49,236 +67,89 @@ function VoteManagement({ onBack }) {
         .order('created_at', { ascending: false });
 
       if (error) throw error;
-
-      // 각 투표에 대한 응답 수 가져오기
-      const votesWithStats = await Promise.all(
-        (data || []).map(async (vote) => {
-          const { count } = await supabase
-            .from('vote_responses')
-            .select('*', { count: 'exact', head: true })
-            .eq('vote_id', vote.id);
-
-          return { ...vote, response_count: count || 0 };
-        })
-      );
-
-      setVotes(votesWithStats);
+      setVotes(data || []);
     } catch (error) {
       console.error('Load votes error:', error);
-      alert('투표를 불러오는 중 오류가 발생했습니다.');
     } finally {
       setLoading(false);
     }
-  }, []);
-
-  const handleSubmit = async () => {
-    if (!formData.title.trim()) {
-      alert('제목을 입력해주세요.');
-      return;
-    }
-    
-    const validOptions = formData.options.filter(opt => opt.trim());
-    if (validOptions.length < 2) {
-      alert('최소 2개의 선택지를 입력해주세요.');
-      return;
-    }
-
-    if (formData.allow_multiple && formData.max_selections > validOptions.length) {
-      alert('최대 선택 가능 수는 전체 선택지 개수를 초과할 수 없습니다.');
-      return;
-    }
-
-    try {
-      const optionsJson = validOptions.map((text, index) => ({
-        id: index + 1,
-        text: text.trim(),
-        votes: 0
-      }));
-
-      const submitData = {
-        title: formData.title,
-        description: formData.description || null,
-        options: optionsJson,
-        ends_at: formData.ends_at || null,
-        allow_multiple: formData.allow_multiple,
-        max_selections: formData.allow_multiple ? formData.max_selections : 1,
-        is_anonymous: formData.is_anonymous,
-        is_active: formData.is_active,
-        created_by: 'admin'
-      };
-
-      if (editingVote) {
-        const { count } = await supabase
-          .from('vote_responses')
-          .select('*', { count: 'exact', head: true })
-          .eq('vote_id', editingVote.id);
-
-        if (count > 0) {
-          if (!window.confirm(
-            `⚠️ 이미 ${count}명이 참여한 투표입니다.\n` +
-            `수정하면 기존 투표 결과가 유지되지만, 선택지 변경 시 결과가 맞지 않을 수 있습니다.\n\n` +
-            `계속 진행하시겠습니까?`
-          )) {
-            return;
-          }
-        }
-
-        const { error } = await supabase
-          .from('votes')
-          .update(submitData)
-          .eq('id', editingVote.id);
-
-        if (error) throw error;
-        alert('✅ 투표가 수정되었습니다!');
-      } else {
-        const { error } = await supabase
-          .from('votes')
-          .insert([submitData]);
-
-        if (error) throw error;
-        alert('✅ 투표가 생성되었습니다!');
-      }
-
-      resetForm();
-      loadVotes();
-    } catch (error) {
-      console.error('Submit error:', error);
-      alert('오류가 발생했습니다: ' + error.message);
-    }
   };
 
-  const handleEdit = (vote) => {
-    setEditingVote(vote);
-    
-    const options = vote.options.map(opt => opt.text);
-    
-    setFormData({
-      title: vote.title,
-      description: vote.description || '',
-      options: options,
-      ends_at: vote.ends_at ? new Date(vote.ends_at).toISOString().slice(0, 16) : getEndOfMonth(),
-      allow_multiple: vote.allow_multiple,
-      max_selections: vote.max_selections || 1,
-      is_anonymous: vote.is_anonymous,
-      is_active: vote.is_active
-    });
-    setIsWriting(true);
-    
-    setTimeout(() => {
-      if (containerRef.current) {
-        containerRef.current.scrollTop = 0;
-      }
-    }, 100);
-  };
-
-  const handleDelete = async (id) => {
-    const { count } = await supabase
-      .from('vote_responses')
-      .select('*', { count: 'exact', head: true })
-      .eq('vote_id', id);
-
-    const confirmMsg = count > 0
-      ? `이 투표를 삭제하시겠습니까?\n\n⚠️ ${count}명의 참여 기록도 함께 삭제됩니다.`
-      : '이 투표를 삭제하시겠습니까?';
-
-    if (!window.confirm(confirmMsg)) {
-      return;
-    }
-
+  const loadVoteResults = async (voteId) => {
     try {
-      const { error } = await supabase
+      const { data: voteData, error: voteError } = await supabase
         .from('votes')
-        .delete()
-        .eq('id', id);
+        .select('*')
+        .eq('id', voteId)
+        .single();
 
-      if (error) throw error;
-      alert('🗑️ 투표가 삭제되었습니다.');
-      loadVotes();
-    } catch (error) {
-      console.error('Delete error:', error);
-      alert('삭제 중 오류가 발생했습니다.');
-    }
-  };
+      if (voteError) throw voteError;
 
-  const toggleActive = async (id, currentStatus) => {
-    try {
-      const { error } = await supabase
-        .from('votes')
-        .update({ is_active: !currentStatus })
-        .eq('id', id);
-
-      if (error) throw error;
-      alert(`✅ 투표가 ${!currentStatus ? '활성화' : '종료'}되었습니다.`);
-      loadVotes();
-    } catch (error) {
-      console.error('Toggle active error:', error);
-      alert('상태 변경 중 오류가 발생했습니다.');
-    }
-  };
-
-  const viewResults = async (vote) => {
-    try {
-      const { data: responses, error } = await supabase
+      const { data: responses, error: responsesError } = await supabase
         .from('vote_responses')
-        .select(`
-          *,
-          customers (
-            nickname,
-            phone_number
-          )
-        `)
-        .eq('vote_id', vote.id);
+        .select('*, customers(nickname, phone_number)')
+        .eq('vote_id', voteId);
 
-      if (error) throw error;
+      if (responsesError) throw responsesError;
 
-      const optionVotes = {};
-      vote.options.forEach(opt => {
-        optionVotes[opt.id] = 0;
+      const optionCounts = {};
+      voteData.options.forEach(opt => {
+        optionCounts[opt.id] = { ...opt, count: 0, voters: [] };
       });
 
       responses.forEach(response => {
         response.selected_options.forEach(optionId => {
-          optionVotes[optionId] = (optionVotes[optionId] || 0) + 1;
+          if (optionCounts[optionId]) {
+            optionCounts[optionId].count++;
+            if (!voteData.is_anonymous) {
+              optionCounts[optionId].voters.push({
+                nickname: response.customers?.nickname || '알 수 없음',
+                phone: response.customers?.phone_number || '',
+                voted_at: response.voted_at
+              });
+            }
+          }
         });
       });
 
-      const totalVotes = responses.length;
-
-      let resultText = `📊 "${vote.title}" 투표 결과\n\n`;
-      resultText += `전체 참여자: ${totalVotes}명\n\n`;
-      resultText += `─────────────────\n\n`;
-
-      vote.options.forEach(opt => {
-        const count = optionVotes[opt.id] || 0;
-        const percentage = totalVotes > 0 ? ((count / totalVotes) * 100).toFixed(1) : 0;
-        resultText += `${opt.text}\n`;
-        resultText += `${count}표 (${percentage}%)\n`;
-        resultText += `${'█'.repeat(Math.round(percentage / 5))}${'░'.repeat(20 - Math.round(percentage / 5))}\n\n`;
+      setVoteResults({
+        vote: voteData,
+        totalVotes: responses.length,
+        options: Object.values(optionCounts),
+        responses: voteData.is_anonymous ? [] : responses
       });
-
-      if (!vote.is_anonymous && responses.length > 0) {
-        resultText += `\n─────────────────\n\n`;
-        resultText += `📝 참여자 목록:\n\n`;
-        responses.forEach((response, idx) => {
-          const selectedTexts = response.selected_options
-            .map(optId => vote.options.find(o => o.id === optId)?.text)
-            .filter(Boolean)
-            .join(', ');
-          
-          resultText += `${idx + 1}. ${response.customers?.nickname || '알 수 없음'} (${response.customers?.phone_number || '-'})\n`;
-          resultText += `   선택: ${selectedTexts}\n`;
-          resultText += `   ${new Date(response.voted_at).toLocaleString('ko-KR')}\n\n`;
-        });
-      }
-
-      alert(resultText);
+      
+      setShowResults(voteId);
     } catch (error) {
-      console.error('View results error:', error);
-      alert('결과 조회 중 오류가 발생했습니다.');
+      console.error('Load results error:', error);
+      setMessage({ text: '결과 조회 중 오류가 발생했습니다.', type: 'error' });
     }
   };
 
-  const resetForm = () => {
+  const handleAddOption = () => {
+    setFormData({
+      ...formData,
+      options: [...formData.options, '']
+    });
+  };
+
+  const handleRemoveOption = (index) => {
+    if (formData.options.length <= 2) {
+      setMessage({ text: '최소 2개의 옵션이 필요합니다.', type: 'error' });
+      return;
+    }
+    const newOptions = formData.options.filter((_, i) => i !== index);
+    setFormData({ ...formData, options: newOptions });
+  };
+
+  const handleOptionChange = (index, value) => {
+    const newOptions = [...formData.options];
+    newOptions[index] = value;
+    setFormData({ ...formData, options: newOptions });
+  };
+
+  const handleCreateVote = () => {
+    setEditingVote(null);
     setFormData({
       title: '',
       description: '',
@@ -286,388 +157,776 @@ function VoteManagement({ onBack }) {
       ends_at: getEndOfMonth(),
       allow_multiple: false,
       max_selections: 1,
-      is_anonymous: false,
-      is_active: true
+      is_anonymous: false
     });
-    setIsWriting(false);
-    setEditingVote(null);
+    setShowForm(true);
+    setMessage({ text: '', type: '' });
   };
 
-  const addOption = () => {
+  const handleEditVote = (vote) => {
+    setEditingVote(vote);
+    const endsAtKst = vote.ends_at ? gmtToKst(vote.ends_at) : getEndOfMonth();
     setFormData({
-      ...formData,
-      options: [...formData.options, '']
+      title: vote.title,
+      description: vote.description || '',
+      options: vote.options.map(opt => opt.text),
+      ends_at: endsAtKst,
+      allow_multiple: vote.allow_multiple,
+      max_selections: vote.max_selections,
+      is_anonymous: vote.is_anonymous
     });
+    setShowForm(true);
+    setMessage({ text: '', type: '' });
   };
 
-  const removeOption = (index) => {
-    if (formData.options.length <= 2) {
-      alert('최소 2개의 선택지가 필요합니다.');
+  const handleSubmit = async () => {
+    if (!formData.title.trim()) {
+      setMessage({ text: '투표 제목을 입력해주세요.', type: 'error' });
       return;
     }
-    const newOptions = formData.options.filter((_, i) => i !== index);
-    setFormData({ ...formData, options: newOptions });
-  };
 
-  const updateOption = (index, value) => {
-    const newOptions = [...formData.options];
-    newOptions[index] = value;
-    setFormData({ ...formData, options: newOptions });
-  };
-
-  const formatDate = (dateStr) => {
-    if (!dateStr) return '-';
-    const date = new Date(dateStr);
-    return date.toLocaleString('ko-KR', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: false
-    });
-  };
-
-  const formatDateShort = (dateStr) => {
-    if (!dateStr) return '-';
-    const date = new Date(dateStr);
-    return date.toLocaleDateString('ko-KR', {
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: false
-    });
-  };
-
-  const getVoteStatus = (vote) => {
-    const now = new Date();
-    const endsAt = vote.ends_at ? new Date(vote.ends_at) : null;
-    
-    if (!vote.is_active) {
-      return { label: '⏸️ 종료됨', class: 'badge-secondary' };
+    const validOptions = formData.options.filter(opt => opt.trim());
+    if (validOptions.length < 2) {
+      setMessage({ text: '최소 2개의 옵션을 입력해주세요.', type: 'error' });
+      return;
     }
-    if (endsAt && endsAt < now) {
-      return { label: '⏰ 마감됨', class: 'badge-warning' };
+
+    if (formData.allow_multiple && formData.max_selections < 1) {
+      setMessage({ text: '최대 선택 개수는 1개 이상이어야 합니다.', type: 'error' });
+      return;
     }
-    
-    if (endsAt) {
-      const diffTime = endsAt - now;
-      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-      
-      if (diffDays <= 1) {
-        return { label: '🔥 마감임박', class: 'badge-warning' };
-      } else if (diffDays <= 7) {
-        return { label: `⏳ D-${diffDays}`, class: 'badge-info' };
+
+    if (formData.allow_multiple && formData.max_selections > validOptions.length) {
+      setMessage({ text: '최대 선택 개수는 옵션 개수를 초과할 수 없습니다.', type: 'error' });
+      return;
+    }
+
+    try {
+      const optionsData = validOptions.map((text, index) => ({
+        id: index + 1,
+        text: text.trim()
+      }));
+
+      const endsAtGmt = formData.ends_at ? kstToGmt(formData.ends_at) : null;
+
+      const voteData = {
+        title: formData.title.trim(),
+        description: formData.description.trim() || null,
+        options: optionsData,
+        ends_at: endsAtGmt,
+        allow_multiple: formData.allow_multiple,
+        max_selections: formData.allow_multiple ? formData.max_selections : 1,
+        is_anonymous: formData.is_anonymous,
+        is_active: true,
+        created_by: 'admin'
+      };
+
+      if (editingVote) {
+        const { error } = await supabase
+          .from('votes')
+          .update(voteData)
+          .eq('id', editingVote.id);
+        if (error) throw error;
+        setMessage({ text: '✅ 투표가 수정되었습니다.', type: 'success' });
+      } else {
+        const { error } = await supabase
+          .from('votes')
+          .insert(voteData);
+        if (error) throw error;
+        setMessage({ text: '✅ 투표가 생성되었습니다.', type: 'success' });
       }
+
+      await loadVotes();
+      setTimeout(() => {
+        setShowForm(false);
+        setEditingVote(null);
+        setMessage({ text: '', type: '' });
+      }, 1500);
+
+    } catch (error) {
+      console.error('Submit error:', error);
+      setMessage({ text: '저장 중 오류가 발생했습니다: ' + error.message, type: 'error' });
     }
-    
-    return { label: '✅ 진행중', class: 'badge-success' };
   };
 
-  const stats = votes.reduce((acc, vote) => {
-    acc.total++;
-    if (vote.is_active) acc.active++;
-    acc.totalResponses += vote.response_count || 0;
-    return acc;
-  }, { total: 0, active: 0, totalResponses: 0 });
+  const handleToggleActive = async (vote) => {
+    try {
+      const { error } = await supabase
+        .from('votes')
+        .update({ is_active: !vote.is_active })
+        .eq('id', vote.id);
+
+      if (error) throw error;
+      await loadVotes();
+      setMessage({ 
+        text: vote.is_active ? '✅ 투표가 종료되었습니다.' : '✅ 투표가 재활성화되었습니다.', 
+        type: 'success' 
+      });
+      setTimeout(() => setMessage({ text: '', type: '' }), 2000);
+    } catch (error) {
+      console.error('Toggle active error:', error);
+      setMessage({ text: '상태 변경 중 오류가 발생했습니다.', type: 'error' });
+    }
+  };
+
+  const handleDeleteVote = async (voteId) => {
+    if (!window.confirm('이 투표를 삭제하시겠습니까?\n관련된 모든 응답도 함께 삭제됩니다.')) {
+      return;
+    }
+
+    try {
+      const { error } = await supabase
+        .from('votes')
+        .delete()
+        .eq('id', voteId);
+
+      if (error) throw error;
+      await loadVotes();
+      setMessage({ text: '🗑️ 투표가 삭제되었습니다.', type: 'success' });
+      setTimeout(() => setMessage({ text: '', type: '' }), 2000);
+    } catch (error) {
+      console.error('Delete error:', error);
+      setMessage({ text: '삭제 중 오류가 발생했습니다.', type: 'error' });
+    }
+  };
+
+  const handleCloseResults = () => {
+    setShowResults(null);
+    setVoteResults(null);
+  };
 
   return (
-    <div className="notice-management" ref={containerRef}>
-      <div className="notice-header">
-        <h1>📊 투표 관리</h1>
-        <div className="header-buttons">
-          {!isWriting && (
-            <button className="btn btn-success" onClick={() => setIsWriting(true)}>
-              + 새 투표 만들기
-            </button>
-          )}
-          <button className="btn-close" onClick={onBack}>
-            ✕ 닫기
-          </button>
+    <div style={{ 
+      padding: '30px', 
+      maxWidth: '1400px', 
+      margin: '0 auto',
+      background: 'white',
+      minHeight: '100vh'
+    }}>
+      <div style={{
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: '30px',
+        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+        borderRadius: '15px',
+        padding: '30px',
+        boxShadow: '0 10px 30px rgba(102, 126, 234, 0.3)'
+      }}>
+        <div>
+          <h1 style={{ color: 'white', margin: '0 0 10px 0', fontSize: '32px', fontWeight: '700' }}>📊 투표 관리</h1>
+          <p style={{ color: 'rgba(255,255,255,0.9)', margin: 0, fontSize: '16px' }}>
+            고객 설문조사 및 투표를 관리합니다
+          </p>
         </div>
+        <button 
+          onClick={handleCreateVote}
+          style={{
+            background: 'white',
+            color: '#667eea',
+            border: 'none',
+            padding: '15px 30px',
+            borderRadius: '10px',
+            fontSize: '16px',
+            fontWeight: '700',
+            cursor: 'pointer',
+            boxShadow: '0 5px 15px rgba(0,0,0,0.2)',
+            transition: 'all 0.3s',
+            whiteSpace: 'nowrap'
+          }}
+          onMouseEnter={(e) => e.target.style.transform = 'translateY(-2px)'}
+          onMouseLeave={(e) => e.target.style.transform = 'translateY(0)'}
+        >
+          ➕ 새 투표 만들기
+        </button>
       </div>
 
-      <div className="stats">
-        <div className="stat-box">
-          <div className="stat-number">{stats.total}</div>
-          <div className="stat-label">전체 투표</div>
+      {message.text && (
+        <div style={{
+          padding: '15px 20px',
+          borderRadius: '10px',
+          marginBottom: '20px',
+          textAlign: 'center',
+          fontSize: '16px',
+          fontWeight: '600',
+          background: message.type === 'success' ? '#d4edda' : '#f8d7da',
+          color: message.type === 'success' ? '#155724' : '#721c24',
+          border: `2px solid ${message.type === 'success' ? '#c3e6cb' : '#f5c6cb'}`
+        }}>
+          {message.text}
         </div>
-        <div className="stat-box">
-          <div className="stat-number">{stats.active}</div>
-          <div className="stat-label">진행중</div>
-        </div>
-        <div className="stat-box">
-          <div className="stat-number">{stats.totalResponses}</div>
-          <div className="stat-label">총 참여 수</div>
-        </div>
-      </div>
+      )}
 
-      {isWriting && (
-        <div className="notice-form">
-          <h2>{editingVote ? '투표 수정' : '새 투표 만들기'}</h2>
-          
-          <div className="input-group">
-            <label>투표 제목</label>
+      {showForm && (
+        <div style={{
+          background: '#f8f9fa',
+          border: '2px solid #dee2e6',
+          borderRadius: '15px',
+          padding: '35px',
+          marginBottom: '30px',
+          boxShadow: '0 5px 20px rgba(0,0,0,0.1)'
+        }}>
+          <h2 style={{ color: '#495057', marginBottom: '25px', fontSize: '26px', fontWeight: '700' }}>
+            {editingVote ? '✏️ 투표 수정' : '➕ 새 투표 만들기'}
+          </h2>
+
+          <div style={{ marginBottom: '20px' }}>
+            <label style={{ display: 'block', color: '#495057', fontSize: '15px', fontWeight: '600', marginBottom: '8px' }}>
+              투표 제목 *
+            </label>
             <input
               type="text"
               value={formData.title}
               onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-              placeholder="투표 제목을 입력하세요"
+              placeholder="예: 다음 달 이벤트 메뉴 투표"
+              maxLength="200"
+              style={{
+                width: '100%',
+                padding: '12px 15px',
+                border: '2px solid #ced4da',
+                borderRadius: '8px',
+                fontSize: '15px',
+                background: 'white'
+              }}
             />
           </div>
 
-          <div className="input-group">
-            <label>설명 (선택)</label>
+          <div style={{ marginBottom: '20px' }}>
+            <label style={{ display: 'block', color: '#495057', fontSize: '15px', fontWeight: '600', marginBottom: '8px' }}>
+              설명
+            </label>
             <textarea
               value={formData.description}
               onChange={(e) => setFormData({ ...formData, description: e.target.value })}
               placeholder="투표에 대한 설명을 입력하세요"
               rows="3"
+              maxLength="500"
+              style={{
+                width: '100%',
+                padding: '12px 15px',
+                border: '2px solid #ced4da',
+                borderRadius: '8px',
+                fontSize: '15px',
+                background: 'white',
+                resize: 'vertical'
+              }}
             />
           </div>
 
-          <div className="input-group">
-            <label>선택지</label>
+          <div style={{ marginBottom: '20px' }}>
+            <label style={{ display: 'block', color: '#495057', fontSize: '15px', fontWeight: '600', marginBottom: '8px' }}>
+              투표 옵션 * (최소 2개)
+            </label>
             {formData.options.map((option, index) => (
               <div key={index} style={{ display: 'flex', gap: '10px', marginBottom: '10px' }}>
                 <input
                   type="text"
                   value={option}
-                  onChange={(e) => updateOption(index, e.target.value)}
-                  placeholder={`선택지 ${index + 1}`}
-                  style={{ flex: 1 }}
+                  onChange={(e) => handleOptionChange(index, e.target.value)}
+                  placeholder={`옵션 ${index + 1}`}
+                  maxLength="100"
+                  style={{
+                    flex: 1,
+                    padding: '12px 15px',
+                    border: '2px solid #ced4da',
+                    borderRadius: '8px',
+                    fontSize: '15px',
+                    background: 'white'
+                  }}
                 />
                 {formData.options.length > 2 && (
                   <button
-                    className="btn btn-warning"
-                    onClick={() => removeOption(index)}
-                    style={{ width: 'auto', padding: '10px 15px' }}
+                    onClick={() => handleRemoveOption(index)}
+                    style={{
+                      background: '#dc3545',
+                      color: 'white',
+                      border: 'none',
+                      padding: '12px 20px',
+                      borderRadius: '8px',
+                      cursor: 'pointer',
+                      fontSize: '16px',
+                      fontWeight: '600'
+                    }}
                   >
-                    ✕
+                    🗑️
                   </button>
                 )}
               </div>
             ))}
             <button
-              className="btn btn-info"
-              onClick={addOption}
-              style={{ width: 'auto', padding: '10px 20px', marginTop: '10px' }}
+              onClick={handleAddOption}
+              style={{
+                background: 'white',
+                border: '2px dashed #6c757d',
+                color: '#6c757d',
+                padding: '12px',
+                borderRadius: '8px',
+                cursor: 'pointer',
+                width: '100%',
+                fontSize: '15px',
+                fontWeight: '600',
+                marginTop: '10px',
+                transition: 'all 0.3s'
+              }}
+              onMouseEnter={(e) => {
+                e.target.style.background = '#f8f9fa';
+                e.target.style.borderColor = '#495057';
+              }}
+              onMouseLeave={(e) => {
+                e.target.style.background = 'white';
+                e.target.style.borderColor = '#6c757d';
+              }}
             >
-              + 선택지 추가
+              ➕ 옵션 추가
             </button>
           </div>
 
-          <div className="checkbox-group">
-            <label>
+          <div style={{ marginBottom: '20px' }}>
+            <label style={{ display: 'block', color: '#495057', fontSize: '15px', fontWeight: '600', marginBottom: '8px' }}>
+              종료 날짜 (기본: 월말 23:59)
+            </label>
+            <input
+              type="datetime-local"
+              value={formData.ends_at}
+              onChange={(e) => setFormData({ ...formData, ends_at: e.target.value })}
+              style={{
+                width: '100%',
+                padding: '12px 15px',
+                border: '2px solid #ced4da',
+                borderRadius: '8px',
+                fontSize: '15px',
+                background: 'white'
+              }}
+            />
+            <div style={{ color: '#6c757d', fontSize: '13px', marginTop: '5px' }}>
+              💡 한국 시간(KST) 기준으로 입력해주세요
+            </div>
+          </div>
+
+          <div style={{ marginBottom: '20px' }}>
+            <label style={{ 
+              display: 'flex', 
+              alignItems: 'center', 
+              gap: '10px', 
+              color: '#495057', 
+              fontSize: '15px',
+              cursor: 'pointer',
+              userSelect: 'none'
+            }}>
               <input
                 type="checkbox"
                 checked={formData.allow_multiple}
                 onChange={(e) => setFormData({ 
                   ...formData, 
                   allow_multiple: e.target.checked,
-                  max_selections: e.target.checked ? 2 : 1
+                  max_selections: e.target.checked ? formData.max_selections : 1
                 })}
+                style={{ width: '20px', height: '20px', cursor: 'pointer' }}
               />
-              <span>☑️ 복수 선택 허용</span>
+              <span style={{ fontWeight: '600' }}>복수 선택 허용</span>
             </label>
           </div>
 
           {formData.allow_multiple && (
-            <div className="input-group">
-              <label>최대 선택 가능 수</label>
+            <div style={{ marginBottom: '20px' }}>
+              <label style={{ display: 'block', color: '#495057', fontSize: '15px', fontWeight: '600', marginBottom: '8px' }}>
+                최대 선택 개수
+              </label>
               <input
                 type="number"
+                min="1"
+                max={formData.options.filter(opt => opt.trim()).length}
                 value={formData.max_selections}
                 onChange={(e) => setFormData({ 
                   ...formData, 
-                  max_selections: Math.max(1, parseInt(e.target.value) || 1)
+                  max_selections: parseInt(e.target.value) || 1 
                 })}
-                min="1"
-                max={formData.options.filter(opt => opt.trim()).length}
+                style={{
+                  width: '150px',
+                  padding: '12px 15px',
+                  border: '2px solid #ced4da',
+                  borderRadius: '8px',
+                  fontSize: '15px',
+                  background: 'white'
+                }}
               />
             </div>
           )}
 
-          <div className="checkbox-group">
-            <label>
+          <div style={{ marginBottom: '25px' }}>
+            <label style={{ 
+              display: 'flex', 
+              alignItems: 'center', 
+              gap: '10px', 
+              color: '#495057', 
+              fontSize: '15px',
+              cursor: 'pointer',
+              userSelect: 'none'
+            }}>
               <input
                 type="checkbox"
                 checked={formData.is_anonymous}
                 onChange={(e) => setFormData({ ...formData, is_anonymous: e.target.checked })}
+                style={{ width: '20px', height: '20px', cursor: 'pointer' }}
               />
-              <span>🎭 익명 투표</span>
+              <span style={{ fontWeight: '600' }}>익명 투표 (투표자 정보 숨김)</span>
             </label>
           </div>
 
-          <div className="input-group">
-            <label>마감 시간 (기본값: 이번 달 말일 23:59)</label>
-            <input
-              type="datetime-local"
-              value={formData.ends_at}
-              onChange={(e) => setFormData({ ...formData, ends_at: e.target.value })}
-              min={new Date().toISOString().slice(0, 16)}
-            />
-            <div style={{ fontSize: '12px', color: '#e0b0ff', marginTop: '5px' }}>
-              💡 현재 설정: {formData.ends_at ? new Date(formData.ends_at).toLocaleString('ko-KR', {
-                year: 'numeric',
-                month: 'long',
-                day: 'numeric',
-                hour: '2-digit',
-                minute: '2-digit'
-              }) : '설정 안 됨'}
-            </div>
-          </div>
-
-          <div className="checkbox-group">
-            <label>
-              <input
-                type="checkbox"
-                checked={formData.is_active}
-                onChange={(e) => setFormData({ ...formData, is_active: e.target.checked })}
-              />
-              <span>✅ 즉시 활성화</span>
-            </label>
-          </div>
-
-          <div className="form-buttons">
-            <button className="btn btn-primary" onClick={handleSubmit}>
-              {editingVote ? '수정하기' : '만들기'}
+          <div style={{ display: 'flex', gap: '15px' }}>
+            <button
+              onClick={handleSubmit}
+              style={{
+                flex: 1,
+                background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                color: 'white',
+                border: 'none',
+                padding: '15px',
+                borderRadius: '10px',
+                fontSize: '16px',
+                fontWeight: '700',
+                cursor: 'pointer',
+                boxShadow: '0 5px 15px rgba(102, 126, 234, 0.3)',
+                transition: 'all 0.3s'
+              }}
+              onMouseEnter={(e) => e.target.style.transform = 'translateY(-2px)'}
+              onMouseLeave={(e) => e.target.style.transform = 'translateY(0)'}
+            >
+              {editingVote ? '💾 수정하기' : '✅ 생성하기'}
             </button>
-            <button className="btn btn-warning" onClick={resetForm}>
-              취소
+            <button
+              onClick={() => {
+                setShowForm(false);
+                setEditingVote(null);
+                setMessage({ text: '', type: '' });
+              }}
+              style={{
+                flex: 1,
+                background: '#6c757d',
+                color: 'white',
+                border: 'none',
+                padding: '15px',
+                borderRadius: '10px',
+                fontSize: '16px',
+                fontWeight: '700',
+                cursor: 'pointer',
+                transition: 'all 0.3s'
+              }}
+              onMouseEnter={(e) => e.target.style.background = '#5a6268'}
+              onMouseLeave={(e) => e.target.style.background = '#6c757d'}
+            >
+              ✕ 취소
+            </button>
+          </div>
+        </div>
+      )}
+
+      {showResults && voteResults && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0, 0, 0, 0.7)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000,
+          padding: '20px'
+        }}>
+          <div style={{
+            background: 'white',
+            borderRadius: '15px',
+            padding: '35px',
+            maxWidth: '900px',
+            width: '100%',
+            maxHeight: '90vh',
+            overflowY: 'auto',
+            boxShadow: '0 20px 60px rgba(0,0,0,0.3)'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '25px' }}>
+              <div>
+                <h2 style={{ color: '#495057', margin: '0 0 10px 0', fontSize: '28px', fontWeight: '700' }}>
+                  📊 {voteResults.vote.title}
+                </h2>
+                {voteResults.vote.description && (
+                  <p style={{ color: '#6c757d', margin: '0 0 15px 0', fontSize: '16px', lineHeight: '1.6' }}>
+                    {voteResults.vote.description}
+                  </p>
+                )}
+                <div style={{ color: '#6c757d', fontSize: '16px' }}>
+                  총 투표 수: <strong style={{ color: '#667eea', fontSize: '20px' }}>{voteResults.totalVotes}명</strong>
+                </div>
+              </div>
+              <button
+                onClick={handleCloseResults}
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  color: '#6c757d',
+                  fontSize: '28px',
+                  cursor: 'pointer',
+                  padding: '5px 10px',
+                  lineHeight: 1
+                }}
+              >
+                ✕
+              </button>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', marginBottom: '25px' }}>
+              {voteResults.options
+                .sort((a, b) => b.count - a.count)
+                .map((option) => {
+                  const percentage = voteResults.totalVotes > 0 
+                    ? ((option.count / voteResults.totalVotes) * 100).toFixed(1)
+                    : 0;
+
+                  return (
+                    <div key={option.id} style={{
+                      background: '#f8f9fa',
+                      border: '2px solid #e9ecef',
+                      borderRadius: '12px',
+                      padding: '25px'
+                    }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                        <div style={{ color: '#495057', fontSize: '18px', fontWeight: '600' }}>
+                          {option.text}
+                        </div>
+                        <div style={{ color: '#667eea', fontSize: '22px', fontWeight: '700' }}>
+                          {option.count}표 ({percentage}%)
+                        </div>
+                      </div>
+
+                      <div style={{
+                        background: '#e9ecef',
+                        borderRadius: '10px',
+                        height: '24px',
+                        overflow: 'hidden',
+                        marginBottom: '12px'
+                      }}>
+                        <div style={{
+                          background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                          height: '100%',
+                          width: `${percentage}%`,
+                          transition: 'width 0.5s ease'
+                        }} />
+                      </div>
+
+                      {!voteResults.vote.is_anonymous && option.voters.length > 0 && (
+                        <div style={{ marginTop: '15px' }}>
+                          <div style={{ color: '#6c757d', fontSize: '14px', marginBottom: '8px', fontWeight: '600' }}>
+                            투표자:
+                          </div>
+                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                            {option.voters.map((voter, idx) => (
+                              <span key={idx} style={{
+                                background: 'white',
+                                color: '#495057',
+                                padding: '6px 14px',
+                                borderRadius: '20px',
+                                fontSize: '14px',
+                                border: '2px solid #dee2e6',
+                                fontWeight: '500'
+                              }}>
+                                {voter.nickname}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+            </div>
+
+            <button
+              onClick={handleCloseResults}
+              style={{
+                width: '100%',
+                background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                color: 'white',
+                border: 'none',
+                padding: '15px',
+                borderRadius: '10px',
+                fontSize: '16px',
+                fontWeight: '700',
+                cursor: 'pointer',
+                boxShadow: '0 5px 15px rgba(102, 126, 234, 0.3)'
+              }}
+            >
+              닫기
             </button>
           </div>
         </div>
       )}
 
       {loading ? (
-        <div className="loading">로딩 중...</div>
+        <div style={{ textAlign: 'center', padding: '60px', fontSize: '18px', color: '#6c757d' }}>
+          로딩 중...
+        </div>
       ) : votes.length === 0 ? (
-        <div className="empty-state">
-          <div className="empty-icon">🔭</div>
-          <h3>등록된 투표가 없습니다</h3>
-          <p>새 투표를 만들어보세요!</p>
+        <div style={{
+          textAlign: 'center',
+          padding: '80px 20px',
+          background: '#f8f9fa',
+          borderRadius: '15px',
+          border: '2px solid #dee2e6'
+        }}>
+          <div style={{ fontSize: '80px', marginBottom: '20px' }}>📊</div>
+          <h3 style={{ color: '#495057', fontSize: '24px', marginBottom: '10px' }}>생성된 투표가 없습니다</h3>
+          <p style={{ color: '#6c757d', fontSize: '16px' }}>새 투표를 만들어 고객들의 의견을 들어보세요</p>
         </div>
       ) : (
-        <div className="notice-list">
-          <table>
-            <thead>
-              <tr>
-                <th>상태</th>
-                <th>제목</th>
-                <th>참여자</th>
-                <th>선택지 수</th>
-                <th>생성일</th>
-                <th>마감일</th>
-                <th>관리</th>
-              </tr>
-            </thead>
-            <tbody>
-              {votes.map((vote) => {
-                const status = getVoteStatus(vote);
-                return (
-                  <tr key={vote.id}>
-                    <td>
-                      <span className={`badge ${status.class}`}>
-                        {status.label}
-                      </span>
-                    </td>
-                    <td className="notice-title-cell">
-                      {vote.title}
-                      {vote.allow_multiple && (
-                        <span style={{ fontSize: '12px', color: '#e0b0ff', marginLeft: '5px' }}>
-                          (복수선택)
-                        </span>
-                      )}
-                      {vote.is_anonymous && (
-                        <span style={{ fontSize: '12px', color: '#e0b0ff', marginLeft: '5px' }}>
-                          (익명)
-                        </span>
-                      )}
-                    </td>
-                    <td>
-                      <strong style={{ color: 'gold', fontSize: '16px' }}>
-                        {vote.response_count || 0}
-                      </strong>명
-                    </td>
-                    <td>{vote.options.length}개</td>
-                    <td>{formatDateShort(vote.created_at)}</td>
-                    <td>
-                      {vote.ends_at ? (
-                        <div>
-                          <div style={{ 
-                            color: new Date(vote.ends_at) < new Date() ? '#ffcccb' : '#90EE90',
-                            fontWeight: 'bold',
-                            marginBottom: '3px'
-                          }}>
-                            {formatDateShort(vote.ends_at)}
-                          </div>
-                          <div style={{ 
-                            fontSize: '11px', 
-                            color: '#e0b0ff',
-                            opacity: 0.8
-                          }}>
-                            {(() => {
-                              const now = new Date();
-                              const endsAt = new Date(vote.ends_at);
-                              if (endsAt < now) {
-                                return '마감됨';
-                              }
-                              const diffTime = endsAt - now;
-                              const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-                              if (diffDays === 0) {
-                                return '오늘 마감';
-                              } else if (diffDays === 1) {
-                                return '내일 마감';
-                              } else {
-                                return `${diffDays}일 남음`;
-                              }
-                            })()}
-                          </div>
-                        </div>
-                      ) : (
-                        <span style={{ color: '#90EE90' }}>무제한</span>
-                      )}
-                    </td>
-                    <td>
-                      <div className="action-buttons">
-                        <button 
-                          className="btn-publish"
-                          onClick={() => viewResults(vote)}
-                          title="결과 보기"
-                          style={{ fontSize: '14px' }}
-                        >
-                          📊
-                        </button>
-                        <button 
-                          className="btn-edit"
-                          onClick={() => toggleActive(vote.id, vote.is_active)}
-                          title={vote.is_active ? '종료하기' : '재활성화'}
-                        >
-                          {vote.is_active ? '⏸️' : '▶️'}
-                        </button>
-                        <button 
-                          className="btn-edit"
-                          onClick={() => handleEdit(vote)}
-                          title="수정"
-                        >
-                          ✏️
-                        </button>
-                        <button 
-                          className="btn-delete"
-                          onClick={() => handleDelete(vote.id)}
-                          title="삭제"
-                        >
-                          🗑️
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(450px, 1fr))', gap: '25px' }}>
+          {votes.map((vote) => (
+            <div key={vote.id} style={{
+              background: 'white',
+              border: `3px solid ${vote.is_active ? '#667eea' : '#adb5bd'}`,
+              borderRadius: '15px',
+              padding: '25px',
+              boxShadow: '0 5px 20px rgba(0,0,0,0.1)',
+              transition: 'all 0.3s',
+              opacity: vote.is_active ? 1 : 0.7
+            }}>
+              <div style={{ marginBottom: '20px' }}>
+                <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', marginBottom: '12px', flexWrap: 'wrap' }}>
+                  <h3 style={{ color: '#495057', margin: 0, fontSize: '20px', fontWeight: '700', flex: 1 }}>
+                    {vote.title}
+                  </h3>
+                  <span style={{
+                    background: vote.is_active ? '#d4edda' : '#e9ecef',
+                    color: vote.is_active ? '#155724' : '#6c757d',
+                    padding: '6px 14px',
+                    borderRadius: '20px',
+                    fontSize: '13px',
+                    fontWeight: '600',
+                    border: `2px solid ${vote.is_active ? '#c3e6cb' : '#dee2e6'}`,
+                    whiteSpace: 'nowrap'
+                  }}>
+                    {vote.is_active ? '✅ 진행중' : '⏸️ 종료'}
+                  </span>
+                </div>
+
+                <div style={{ display: 'flex', gap: '8px', marginBottom: '12px', flexWrap: 'wrap' }}>
+                  {vote.allow_multiple && (
+                    <span style={{
+                      background: '#d1ecf1',
+                      color: '#0c5460',
+                      padding: '5px 12px',
+                      borderRadius: '15px',
+                      fontSize: '12px',
+                      fontWeight: '600',
+                      border: '2px solid #bee5eb'
+                    }}>
+                      복수선택 (최대 {vote.max_selections}개)
+                    </span>
+                  )}
+                  {vote.is_anonymous && (
+                    <span style={{
+                      background: '#e2d5f1',
+                      color: '#6c3483',
+                      padding: '5px 12px',
+                      borderRadius: '15px',
+                      fontSize: '12px',
+                      fontWeight: '600',
+                      border: '2px solid #d5b8e8'
+                    }}>
+                      🔒 익명
+                    </span>
+                  )}
+                </div>
+
+                {vote.description && (
+                  <p style={{ color: '#6c757d', margin: '0 0 12px 0', fontSize: '15px', lineHeight: '1.5' }}>
+                    {vote.description}
+                  </p>
+                )}
+
+                <div style={{ display: 'flex', gap: '15px', fontSize: '14px', color: '#6c757d' }}>
+                  <span>📋 옵션: {vote.options.length}개</span>
+                  <span>⏰ 종료: {formatDate(vote.ends_at)}</span>
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '10px' }}>
+                <button
+                  onClick={() => loadVoteResults(vote.id)}
+                  style={{
+                    background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                    color: 'white',
+                    border: 'none',
+                    padding: '12px',
+                    borderRadius: '8px',
+                    fontSize: '14px',
+                    fontWeight: '600',
+                    cursor: 'pointer',
+                    transition: 'all 0.3s',
+                    boxShadow: '0 3px 10px rgba(102, 126, 234, 0.3)'
+                  }}
+                  onMouseEnter={(e) => e.target.style.transform = 'translateY(-2px)'}
+                  onMouseLeave={(e) => e.target.style.transform = 'translateY(0)'}
+                >
+                  📊 결과
+                </button>
+                <button
+                  onClick={() => handleEditVote(vote)}
+                  style={{
+                    background: '#17a2b8',
+                    color: 'white',
+                    border: 'none',
+                    padding: '12px',
+                    borderRadius: '8px',
+                    fontSize: '14px',
+                    fontWeight: '600',
+                    cursor: 'pointer',
+                    transition: 'all 0.3s'
+                  }}
+                  onMouseEnter={(e) => e.target.style.background = '#138496'}
+                  onMouseLeave={(e) => e.target.style.background = '#17a2b8'}
+                >
+                  ✏️ 수정
+                </button>
+                <button
+                  onClick={() => handleToggleActive(vote)}
+                  style={{
+                    background: vote.is_active ? '#ffc107' : '#28a745',
+                    color: 'white',
+                    border: 'none',
+                    padding: '12px',
+                    borderRadius: '8px',
+                    fontSize: '14px',
+                    fontWeight: '600',
+                    cursor: 'pointer',
+                    transition: 'all 0.3s'
+                  }}
+                  onMouseEnter={(e) => e.target.style.background = vote.is_active ? '#e0a800' : '#218838'}
+                  onMouseLeave={(e) => e.target.style.background = vote.is_active ? '#ffc107' : '#28a745'}
+                >
+                  {vote.is_active ? '⏸️ 종료' : '▶️ 재개'}
+                </button>
+                <button
+                  onClick={() => handleDeleteVote(vote.id)}
+                  style={{
+                    background: '#dc3545',
+                    color: 'white',
+                    border: 'none',
+                    padding: '12px',
+                    borderRadius: '8px',
+                    fontSize: '14px',
+                    fontWeight: '600',
+                    cursor: 'pointer',
+                    transition: 'all 0.3s'
+                  }}
+                  onMouseEnter={(e) => e.target.style.background = '#c82333'}
+                  onMouseLeave={(e) => e.target.style.background = '#dc3545'}
+                >
+                  🗑️ 삭제
+                </button>
+              </div>
+            </div>
+          ))}
         </div>
       )}
     </div>
