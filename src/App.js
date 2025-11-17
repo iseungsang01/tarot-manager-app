@@ -6,6 +6,7 @@ import NoticeManagement from './components/NoticeManagement';
 import StoreRequestView from './components/StoreRequestView';
 import CouponManagement from './components/CouponManagement';
 import VoteManagement from './components/VoteManagement';
+import { supabase, AdminPassWord } from './supabaseClient';
 import './App.css';
 
 function App() {
@@ -14,7 +15,7 @@ function App() {
 
   const showAdminLogin = () => {
     const password = prompt('관리자 비밀번호를 입력하세요:');
-    if (password === 'admin1234') {
+    if (password === AdminPassWord) {
       setIsAdminAuthenticated(true);
       setCurrentView('admin');
     } else {
