@@ -15,8 +15,7 @@ function VoteManagement() {
     options: ['', ''],
     ends_at: getEndOfMonth(),
     allow_multiple: false,
-    max_selections: 1,
-    is_anonymous: false
+    max_selections: 1
   });
 
   const [message, setMessage] = useState({ text: '', type: '' });
@@ -85,38 +84,18 @@ function VoteManagement() {
 
       if (voteError) throw voteError;
 
-      const { data: responses, error: responsesError } = await supabase
-        .from('vote_responses')
-        .select('*, customers(nickname, phone_number)')
-        .eq('vote_id', voteId);
-
-      if (responsesError) throw responsesError;
-
-      const optionCounts = {};
-      voteData.options.forEach(opt => {
-        optionCounts[opt.id] = { ...opt, count: 0, voters: [] };
-      });
-
-      responses.forEach(response => {
-        response.selected_options.forEach(optionId => {
-          if (optionCounts[optionId]) {
-            optionCounts[optionId].count++;
-            if (!voteData.is_anonymous) {
-              optionCounts[optionId].voters.push({
-                nickname: response.customers?.nickname || '알 수 없음',
-                phone: response.customers?.phone_number || '',
-                voted_at: response.voted_at
-              });
-            }
-          }
-        });
-      });
+      // vote_counts에서 각 옵션별 투표수 가져오기
+      const voteCounts = voteData.vote_counts || {};
+      
+      const optionsWithCounts = voteData.options.map(opt => ({
+        ...opt,
+        count: voteCounts[opt.id] || 0
+      }));
 
       setVoteResults({
         vote: voteData,
-        totalVotes: responses.length,
-        options: Object.values(optionCounts),
-        responses: voteData.is_anonymous ? [] : responses
+        totalVotes: voteData.total_votes || 0,
+        options: optionsWithCounts
       });
       
       setShowResults(voteId);
@@ -156,8 +135,7 @@ function VoteManagement() {
       options: ['', ''],
       ends_at: getEndOfMonth(),
       allow_multiple: false,
-      max_selections: 1,
-      is_anonymous: false
+      max_selections: 1
     });
     setShowForm(true);
     setMessage({ text: '', type: '' });
@@ -172,8 +150,7 @@ function VoteManagement() {
       options: vote.options.map(opt => opt.text),
       ends_at: endsAtKst,
       allow_multiple: vote.allow_multiple,
-      max_selections: vote.max_selections,
-      is_anonymous: vote.is_anonymous
+      max_selections: vote.max_selections
     });
     setShowForm(true);
     setMessage({ text: '', type: '' });
@@ -216,9 +193,9 @@ function VoteManagement() {
         ends_at: endsAtGmt,
         allow_multiple: formData.allow_multiple,
         max_selections: formData.allow_multiple ? formData.max_selections : 1,
-        is_anonymous: formData.is_anonymous,
         is_active: true,
-        created_by: 'admin'
+        vote_counts: {},
+        total_votes: 0
       };
 
       if (editingVote) {
@@ -316,7 +293,7 @@ function VoteManagement() {
         <div>
           <h1 style={{ color: 'white', margin: '0 0 10px 0', fontSize: '32px', fontWeight: '700' }}>📊 투표 관리</h1>
           <p style={{ color: 'rgba(255,255,255,0.9)', margin: 0, fontSize: '16px' }}>
-            고객 설문조사 및 투표를 관리합니다
+            고객 설문조사 및 투표를 관리합니다 (모든 투표는 익명으로 진행됩니다)
           </p>
         </div>
         <button 
@@ -528,7 +505,7 @@ function VoteManagement() {
           </div>
 
           {formData.allow_multiple && (
-            <div style={{ marginBottom: '20px' }}>
+            <div style={{ marginBottom: '25px' }}>
               <label style={{ display: 'block', color: '#495057', fontSize: '15px', fontWeight: '600', marginBottom: '8px' }}>
                 최대 선택 개수
               </label>
@@ -552,26 +529,6 @@ function VoteManagement() {
               />
             </div>
           )}
-
-          <div style={{ marginBottom: '25px' }}>
-            <label style={{ 
-              display: 'flex', 
-              alignItems: 'center', 
-              gap: '10px', 
-              color: '#495057', 
-              fontSize: '15px',
-              cursor: 'pointer',
-              userSelect: 'none'
-            }}>
-              <input
-                type="checkbox"
-                checked={formData.is_anonymous}
-                onChange={(e) => setFormData({ ...formData, is_anonymous: e.target.checked })}
-                style={{ width: '20px', height: '20px', cursor: 'pointer' }}
-              />
-              <span style={{ fontWeight: '600' }}>익명 투표 (투표자 정보 숨김)</span>
-            </label>
-          </div>
 
           <div style={{ display: 'flex', gap: '15px' }}>
             <button
@@ -703,8 +660,7 @@ function VoteManagement() {
                         background: '#e9ecef',
                         borderRadius: '10px',
                         height: '24px',
-                        overflow: 'hidden',
-                        marginBottom: '12px'
+                        overflow: 'hidden'
                       }}>
                         <div style={{
                           background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
@@ -713,29 +669,6 @@ function VoteManagement() {
                           transition: 'width 0.5s ease'
                         }} />
                       </div>
-
-                      {!voteResults.vote.is_anonymous && option.voters.length > 0 && (
-                        <div style={{ marginTop: '15px' }}>
-                          <div style={{ color: '#6c757d', fontSize: '14px', marginBottom: '8px', fontWeight: '600' }}>
-                            투표자:
-                          </div>
-                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-                            {option.voters.map((voter, idx) => (
-                              <span key={idx} style={{
-                                background: 'white',
-                                color: '#495057',
-                                padding: '6px 14px',
-                                borderRadius: '20px',
-                                fontSize: '14px',
-                                border: '2px solid #dee2e6',
-                                fontWeight: '500'
-                              }}>
-                                {voter.nickname}
-                              </span>
-                            ))}
-                          </div>
-                        </div>
-                      )}
                     </div>
                   );
                 })}
@@ -823,19 +756,17 @@ function VoteManagement() {
                       복수선택 (최대 {vote.max_selections}개)
                     </span>
                   )}
-                  {vote.is_anonymous && (
-                    <span style={{
-                      background: '#e2d5f1',
-                      color: '#6c3483',
-                      padding: '5px 12px',
-                      borderRadius: '15px',
-                      fontSize: '12px',
-                      fontWeight: '600',
-                      border: '2px solid #d5b8e8'
-                    }}>
-                      🔒 익명
-                    </span>
-                  )}
+                  <span style={{
+                    background: '#e2d5f1',
+                    color: '#6c3483',
+                    padding: '5px 12px',
+                    borderRadius: '15px',
+                    fontSize: '12px',
+                    fontWeight: '600',
+                    border: '2px solid #d5b8e8'
+                  }}>
+                    🔒 익명
+                  </span>
                 </div>
 
                 {vote.description && (
@@ -844,9 +775,12 @@ function VoteManagement() {
                   </p>
                 )}
 
-                <div style={{ display: 'flex', gap: '15px', fontSize: '14px', color: '#6c757d' }}>
+                <div style={{ display: 'flex', gap: '15px', fontSize: '14px', color: '#6c757d', marginBottom: '8px' }}>
                   <span>📋 옵션: {vote.options.length}개</span>
-                  <span>⏰ 종료: {formatDate(vote.ends_at)}</span>
+                  <span>📊 참여: {vote.total_votes || 0}명</span>
+                </div>
+                <div style={{ fontSize: '14px', color: '#6c757d' }}>
+                  ⏰ 종료: {formatDate(vote.ends_at)}
                 </div>
               </div>
 
