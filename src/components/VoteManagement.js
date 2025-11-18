@@ -84,7 +84,6 @@ function VoteManagement() {
 
       if (voteError) throw voteError;
 
-      // vote_counts에서 각 옵션별 투표수 가져오기
       const voteCounts = voteData.vote_counts || {};
       
       const optionsWithCounts = voteData.options.map(opt => ({
@@ -273,127 +272,117 @@ function VoteManagement() {
   };
 
   return (
-    <div style={{ 
-      padding: '30px', 
-      maxWidth: '1400px', 
-      margin: '0 auto',
-      background: 'white',
-      minHeight: '100vh'
-    }}>
+    <div style={{ padding: '30px' }}>
       <div style={{
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        marginBottom: '30px',
-        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-        borderRadius: '15px',
+        background: 'var(--gradient-purple)',
+        border: 'var(--border-gold)',
+        borderRadius: '20px',
         padding: '30px',
-        boxShadow: '0 10px 30px rgba(102, 126, 234, 0.3)'
+        marginBottom: '30px',
+        boxShadow: 'var(--shadow-gold)'
       }}>
-        <div>
-          <h1 style={{ color: 'white', margin: '0 0 10px 0', fontSize: '32px', fontWeight: '700' }}>📊 투표 관리</h1>
-          <p style={{ color: 'rgba(255,255,255,0.9)', margin: 0, fontSize: '16px' }}>
-            고객 설문조사 및 투표를 관리합니다 (모든 투표는 익명으로 진행됩니다)
-          </p>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+          <div>
+            <h1 style={{ color: 'var(--gold)', margin: '0 0 10px 0', fontSize: '32px', fontWeight: '700', textShadow: 'var(--glow-gold)' }}>
+              📊 투표 관리
+            </h1>
+            <p style={{ color: 'var(--lavender)', margin: 0, fontSize: '16px' }}>
+              고객 설문조사 및 투표를 관리합니다 (모든 투표는 익명으로 진행됩니다)
+            </p>
+          </div>
+          <button 
+            className="btn btn-primary"
+            onClick={handleCreateVote}
+            style={{ fontSize: '16px', padding: '15px 30px' }}
+          >
+            ➕ 새 투표 만들기
+          </button>
         </div>
-        <button 
-          onClick={handleCreateVote}
-          style={{
-            background: 'white',
-            color: '#667eea',
-            border: 'none',
-            padding: '15px 30px',
-            borderRadius: '10px',
-            fontSize: '16px',
-            fontWeight: '700',
-            cursor: 'pointer',
-            boxShadow: '0 5px 15px rgba(0,0,0,0.2)',
-            transition: 'all 0.3s',
-            whiteSpace: 'nowrap'
-          }}
-          onMouseEnter={(e) => e.target.style.transform = 'translateY(-2px)'}
-          onMouseLeave={(e) => e.target.style.transform = 'translateY(0)'}
-        >
-          ➕ 새 투표 만들기
-        </button>
+
+        {/* 통계 카드 */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '15px' }}>
+          <div style={{
+            background: 'rgba(138, 43, 226, 0.3)',
+            border: '2px solid var(--purple-light)',
+            borderRadius: '15px',
+            padding: '20px',
+            textAlign: 'center'
+          }}>
+            <div style={{ color: 'var(--gold)', fontSize: '36px', fontWeight: '700', marginBottom: '5px', textShadow: 'var(--glow-gold)' }}>
+              {votes.length}
+            </div>
+            <div style={{ color: 'var(--lavender)', fontSize: '14px' }}>총 투표</div>
+          </div>
+          <div style={{
+            background: 'rgba(138, 43, 226, 0.3)',
+            border: '2px solid var(--purple-light)',
+            borderRadius: '15px',
+            padding: '20px',
+            textAlign: 'center'
+          }}>
+            <div style={{ color: 'var(--gold)', fontSize: '36px', fontWeight: '700', marginBottom: '5px', textShadow: 'var(--glow-gold)' }}>
+              {votes.filter(v => v.is_active).length}
+            </div>
+            <div style={{ color: 'var(--lavender)', fontSize: '14px' }}>진행중</div>
+          </div>
+          <div style={{
+            background: 'rgba(138, 43, 226, 0.3)',
+            border: '2px solid var(--purple-light)',
+            borderRadius: '15px',
+            padding: '20px',
+            textAlign: 'center'
+          }}>
+            <div style={{ color: 'var(--gold)', fontSize: '36px', fontWeight: '700', marginBottom: '5px', textShadow: 'var(--glow-gold)' }}>
+              {votes.reduce((sum, v) => sum + (v.total_votes || 0), 0)}
+            </div>
+            <div style={{ color: 'var(--lavender)', fontSize: '14px' }}>총 참여자</div>
+          </div>
+        </div>
       </div>
 
       {message.text && (
-        <div style={{
-          padding: '15px 20px',
-          borderRadius: '10px',
-          marginBottom: '20px',
-          textAlign: 'center',
-          fontSize: '16px',
-          fontWeight: '600',
-          background: message.type === 'success' ? '#d4edda' : '#f8d7da',
-          color: message.type === 'success' ? '#155724' : '#721c24',
-          border: `2px solid ${message.type === 'success' ? '#c3e6cb' : '#f5c6cb'}`
-        }}>
+        <div className={`message ${message.type}`} style={{ marginBottom: '20px', fontSize: '16px' }}>
           {message.text}
         </div>
       )}
 
       {showForm && (
         <div style={{
-          background: '#f8f9fa',
-          border: '2px solid #dee2e6',
-          borderRadius: '15px',
+          background: 'var(--gradient-purple)',
+          border: '3px solid var(--purple-light)',
+          borderRadius: '20px',
           padding: '35px',
           marginBottom: '30px',
-          boxShadow: '0 5px 20px rgba(0,0,0,0.1)'
+          boxShadow: 'var(--shadow-purple)'
         }}>
-          <h2 style={{ color: '#495057', marginBottom: '25px', fontSize: '26px', fontWeight: '700' }}>
+          <h2 style={{ color: 'var(--gold)', marginBottom: '25px', fontSize: '26px', fontWeight: '700' }}>
             {editingVote ? '✏️ 투표 수정' : '➕ 새 투표 만들기'}
           </h2>
 
-          <div style={{ marginBottom: '20px' }}>
-            <label style={{ display: 'block', color: '#495057', fontSize: '15px', fontWeight: '600', marginBottom: '8px' }}>
-              투표 제목 *
-            </label>
+          <div className="input-group">
+            <label>투표 제목 *</label>
             <input
               type="text"
               value={formData.title}
               onChange={(e) => setFormData({ ...formData, title: e.target.value })}
               placeholder="예: 다음 달 이벤트 메뉴 투표"
               maxLength="200"
-              style={{
-                width: '100%',
-                padding: '12px 15px',
-                border: '2px solid #ced4da',
-                borderRadius: '8px',
-                fontSize: '15px',
-                background: 'white'
-              }}
             />
           </div>
 
-          <div style={{ marginBottom: '20px' }}>
-            <label style={{ display: 'block', color: '#495057', fontSize: '15px', fontWeight: '600', marginBottom: '8px' }}>
-              설명
-            </label>
+          <div className="input-group">
+            <label>설명</label>
             <textarea
               value={formData.description}
               onChange={(e) => setFormData({ ...formData, description: e.target.value })}
               placeholder="투표에 대한 설명을 입력하세요"
               rows="3"
               maxLength="500"
-              style={{
-                width: '100%',
-                padding: '12px 15px',
-                border: '2px solid #ced4da',
-                borderRadius: '8px',
-                fontSize: '15px',
-                background: 'white',
-                resize: 'vertical'
-              }}
             />
           </div>
 
-          <div style={{ marginBottom: '20px' }}>
-            <label style={{ display: 'block', color: '#495057', fontSize: '15px', fontWeight: '600', marginBottom: '8px' }}>
-              투표 옵션 * (최소 2개)
-            </label>
+          <div className="input-group">
+            <label>투표 옵션 * (최소 2개)</label>
             {formData.options.map((option, index) => (
               <div key={index} style={{ display: 'flex', gap: '10px', marginBottom: '10px' }}>
                 <input
@@ -402,28 +391,12 @@ function VoteManagement() {
                   onChange={(e) => handleOptionChange(index, e.target.value)}
                   placeholder={`옵션 ${index + 1}`}
                   maxLength="100"
-                  style={{
-                    flex: 1,
-                    padding: '12px 15px',
-                    border: '2px solid #ced4da',
-                    borderRadius: '8px',
-                    fontSize: '15px',
-                    background: 'white'
-                  }}
+                  style={{ flex: 1 }}
                 />
                 {formData.options.length > 2 && (
                   <button
                     onClick={() => handleRemoveOption(index)}
-                    style={{
-                      background: '#dc3545',
-                      color: 'white',
-                      border: 'none',
-                      padding: '12px 20px',
-                      borderRadius: '8px',
-                      cursor: 'pointer',
-                      fontSize: '16px',
-                      fontWeight: '600'
-                    }}
+                    className="btn-delete"
                   >
                     🗑️
                   </button>
@@ -433,63 +406,36 @@ function VoteManagement() {
             <button
               onClick={handleAddOption}
               style={{
-                background: 'white',
-                border: '2px dashed #6c757d',
-                color: '#6c757d',
+                background: 'rgba(138, 43, 226, 0.3)',
+                border: '2px dashed var(--purple-light)',
+                color: 'var(--gold)',
                 padding: '12px',
-                borderRadius: '8px',
+                borderRadius: '10px',
                 cursor: 'pointer',
                 width: '100%',
                 fontSize: '15px',
                 fontWeight: '600',
-                marginTop: '10px',
-                transition: 'all 0.3s'
-              }}
-              onMouseEnter={(e) => {
-                e.target.style.background = '#f8f9fa';
-                e.target.style.borderColor = '#495057';
-              }}
-              onMouseLeave={(e) => {
-                e.target.style.background = 'white';
-                e.target.style.borderColor = '#6c757d';
+                marginTop: '10px'
               }}
             >
               ➕ 옵션 추가
             </button>
           </div>
 
-          <div style={{ marginBottom: '20px' }}>
-            <label style={{ display: 'block', color: '#495057', fontSize: '15px', fontWeight: '600', marginBottom: '8px' }}>
-              종료 날짜 (기본: 월말 23:59)
-            </label>
+          <div className="input-group">
+            <label>종료 날짜 (기본: 월말 23:59)</label>
             <input
               type="datetime-local"
               value={formData.ends_at}
               onChange={(e) => setFormData({ ...formData, ends_at: e.target.value })}
-              style={{
-                width: '100%',
-                padding: '12px 15px',
-                border: '2px solid #ced4da',
-                borderRadius: '8px',
-                fontSize: '15px',
-                background: 'white'
-              }}
             />
-            <div style={{ color: '#6c757d', fontSize: '13px', marginTop: '5px' }}>
+            <div style={{ color: 'var(--lavender)', fontSize: '13px', marginTop: '5px' }}>
               💡 한국 시간(KST) 기준으로 입력해주세요
             </div>
           </div>
 
-          <div style={{ marginBottom: '20px' }}>
-            <label style={{ 
-              display: 'flex', 
-              alignItems: 'center', 
-              gap: '10px', 
-              color: '#495057', 
-              fontSize: '15px',
-              cursor: 'pointer',
-              userSelect: 'none'
-            }}>
+          <div className="checkbox-group">
+            <label className="checkbox-label">
               <input
                 type="checkbox"
                 checked={formData.allow_multiple}
@@ -498,17 +444,14 @@ function VoteManagement() {
                   allow_multiple: e.target.checked,
                   max_selections: e.target.checked ? formData.max_selections : 1
                 })}
-                style={{ width: '20px', height: '20px', cursor: 'pointer' }}
               />
-              <span style={{ fontWeight: '600' }}>복수 선택 허용</span>
+              <span>복수 선택 허용</span>
             </label>
           </div>
 
           {formData.allow_multiple && (
-            <div style={{ marginBottom: '25px' }}>
-              <label style={{ display: 'block', color: '#495057', fontSize: '15px', fontWeight: '600', marginBottom: '8px' }}>
-                최대 선택 개수
-              </label>
+            <div className="input-group">
+              <label>최대 선택 개수</label>
               <input
                 type="number"
                 min="1"
@@ -518,59 +461,27 @@ function VoteManagement() {
                   ...formData, 
                   max_selections: parseInt(e.target.value) || 1 
                 })}
-                style={{
-                  width: '150px',
-                  padding: '12px 15px',
-                  border: '2px solid #ced4da',
-                  borderRadius: '8px',
-                  fontSize: '15px',
-                  background: 'white'
-                }}
+                style={{ width: '150px' }}
               />
             </div>
           )}
 
-          <div style={{ display: 'flex', gap: '15px' }}>
+          <div style={{ display: 'flex', gap: '15px', marginTop: '20px' }}>
             <button
+              className="btn btn-primary"
               onClick={handleSubmit}
-              style={{
-                flex: 1,
-                background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                color: 'white',
-                border: 'none',
-                padding: '15px',
-                borderRadius: '10px',
-                fontSize: '16px',
-                fontWeight: '700',
-                cursor: 'pointer',
-                boxShadow: '0 5px 15px rgba(102, 126, 234, 0.3)',
-                transition: 'all 0.3s'
-              }}
-              onMouseEnter={(e) => e.target.style.transform = 'translateY(-2px)'}
-              onMouseLeave={(e) => e.target.style.transform = 'translateY(0)'}
+              style={{ flex: 1 }}
             >
               {editingVote ? '💾 수정하기' : '✅ 생성하기'}
             </button>
             <button
+              className="btn-back"
               onClick={() => {
                 setShowForm(false);
                 setEditingVote(null);
                 setMessage({ text: '', type: '' });
               }}
-              style={{
-                flex: 1,
-                background: '#6c757d',
-                color: 'white',
-                border: 'none',
-                padding: '15px',
-                borderRadius: '10px',
-                fontSize: '16px',
-                fontWeight: '700',
-                cursor: 'pointer',
-                transition: 'all 0.3s'
-              }}
-              onMouseEnter={(e) => e.target.style.background = '#5a6268'}
-              onMouseLeave={(e) => e.target.style.background = '#6c757d'}
+              style={{ flex: 1 }}
             >
               ✕ 취소
             </button>
@@ -585,7 +496,7 @@ function VoteManagement() {
           left: 0,
           right: 0,
           bottom: 0,
-          background: 'rgba(0, 0, 0, 0.7)',
+          background: 'rgba(0, 0, 0, 0.8)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
@@ -593,27 +504,28 @@ function VoteManagement() {
           padding: '20px'
         }}>
           <div style={{
-            background: 'white',
-            borderRadius: '15px',
+            background: 'var(--gradient-purple)',
+            border: 'var(--border-gold)',
+            borderRadius: '20px',
             padding: '35px',
             maxWidth: '900px',
             width: '100%',
             maxHeight: '90vh',
             overflowY: 'auto',
-            boxShadow: '0 20px 60px rgba(0,0,0,0.3)'
+            boxShadow: 'var(--shadow-gold)'
           }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '25px' }}>
               <div>
-                <h2 style={{ color: '#495057', margin: '0 0 10px 0', fontSize: '28px', fontWeight: '700' }}>
+                <h2 style={{ color: 'var(--gold)', margin: '0 0 10px 0', fontSize: '28px', fontWeight: '700', textShadow: 'var(--glow-gold)' }}>
                   📊 {voteResults.vote.title}
                 </h2>
                 {voteResults.vote.description && (
-                  <p style={{ color: '#6c757d', margin: '0 0 15px 0', fontSize: '16px', lineHeight: '1.6' }}>
+                  <p style={{ color: 'var(--lavender)', margin: '0 0 15px 0', fontSize: '16px', lineHeight: '1.6' }}>
                     {voteResults.vote.description}
                   </p>
                 )}
-                <div style={{ color: '#6c757d', fontSize: '16px' }}>
-                  총 투표 수: <strong style={{ color: '#667eea', fontSize: '20px' }}>{voteResults.totalVotes}명</strong>
+                <div style={{ color: 'var(--lavender)', fontSize: '16px' }}>
+                  총 투표 수: <strong style={{ color: 'var(--gold)', fontSize: '20px' }}>{voteResults.totalVotes}명</strong>
                 </div>
               </div>
               <button
@@ -621,7 +533,7 @@ function VoteManagement() {
                 style={{
                   background: 'transparent',
                   border: 'none',
-                  color: '#6c757d',
+                  color: 'var(--gold)',
                   fontSize: '28px',
                   cursor: 'pointer',
                   padding: '5px 10px',
@@ -642,28 +554,28 @@ function VoteManagement() {
 
                   return (
                     <div key={option.id} style={{
-                      background: '#f8f9fa',
-                      border: '2px solid #e9ecef',
-                      borderRadius: '12px',
+                      background: 'rgba(138, 43, 226, 0.2)',
+                      border: '2px solid var(--purple-light)',
+                      borderRadius: '15px',
                       padding: '25px'
                     }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-                        <div style={{ color: '#495057', fontSize: '18px', fontWeight: '600' }}>
+                        <div style={{ color: 'white', fontSize: '18px', fontWeight: '600' }}>
                           {option.text}
                         </div>
-                        <div style={{ color: '#667eea', fontSize: '22px', fontWeight: '700' }}>
+                        <div style={{ color: 'var(--gold)', fontSize: '22px', fontWeight: '700' }}>
                           {option.count}표 ({percentage}%)
                         </div>
                       </div>
 
                       <div style={{
-                        background: '#e9ecef',
+                        background: 'rgba(138, 43, 226, 0.3)',
                         borderRadius: '10px',
                         height: '24px',
                         overflow: 'hidden'
                       }}>
                         <div style={{
-                          background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                          background: 'linear-gradient(135deg, var(--purple-light) 0%, var(--purple-lighter) 100%)',
                           height: '100%',
                           width: `${percentage}%`,
                           transition: 'width 0.5s ease'
@@ -675,19 +587,9 @@ function VoteManagement() {
             </div>
 
             <button
+              className="btn btn-primary"
               onClick={handleCloseResults}
-              style={{
-                width: '100%',
-                background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                color: 'white',
-                border: 'none',
-                padding: '15px',
-                borderRadius: '10px',
-                fontSize: '16px',
-                fontWeight: '700',
-                cursor: 'pointer',
-                boxShadow: '0 5px 15px rgba(102, 126, 234, 0.3)'
-              }}
+              style={{ width: '100%' }}
             >
               닫기
             </button>
@@ -696,46 +598,37 @@ function VoteManagement() {
       )}
 
       {loading ? (
-        <div style={{ textAlign: 'center', padding: '60px', fontSize: '18px', color: '#6c757d' }}>
-          로딩 중...
-        </div>
+        <div className="loading">로딩 중...</div>
       ) : votes.length === 0 ? (
-        <div style={{
-          textAlign: 'center',
-          padding: '80px 20px',
-          background: '#f8f9fa',
-          borderRadius: '15px',
-          border: '2px solid #dee2e6'
-        }}>
-          <div style={{ fontSize: '80px', marginBottom: '20px' }}>📊</div>
-          <h3 style={{ color: '#495057', fontSize: '24px', marginBottom: '10px' }}>생성된 투표가 없습니다</h3>
-          <p style={{ color: '#6c757d', fontSize: '16px' }}>새 투표를 만들어 고객들의 의견을 들어보세요</p>
+        <div className="empty-state">
+          <div className="empty-icon">📊</div>
+          <h3>생성된 투표가 없습니다</h3>
+          <p>새 투표를 만들어 고객들의 의견을 들어보세요</p>
         </div>
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(450px, 1fr))', gap: '25px' }}>
           {votes.map((vote) => (
             <div key={vote.id} style={{
-              background: 'white',
-              border: `3px solid ${vote.is_active ? '#667eea' : '#adb5bd'}`,
-              borderRadius: '15px',
+              background: 'var(--gradient-purple)',
+              border: vote.is_active ? 'var(--border-purple)' : '3px solid #888',
+              borderRadius: '20px',
               padding: '25px',
-              boxShadow: '0 5px 20px rgba(0,0,0,0.1)',
-              transition: 'all 0.3s',
+              boxShadow: 'var(--shadow-purple)',
               opacity: vote.is_active ? 1 : 0.7
             }}>
               <div style={{ marginBottom: '20px' }}>
                 <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', marginBottom: '12px', flexWrap: 'wrap' }}>
-                  <h3 style={{ color: '#495057', margin: 0, fontSize: '20px', fontWeight: '700', flex: 1 }}>
+                  <h3 style={{ color: 'var(--gold)', margin: 0, fontSize: '20px', fontWeight: '700', flex: 1 }}>
                     {vote.title}
                   </h3>
                   <span style={{
-                    background: vote.is_active ? '#d4edda' : '#e9ecef',
-                    color: vote.is_active ? '#155724' : '#6c757d',
+                    background: vote.is_active ? 'rgba(76, 175, 80, 0.3)' : 'rgba(136, 136, 136, 0.3)',
+                    color: vote.is_active ? 'var(--green)' : '#ccc',
                     padding: '6px 14px',
                     borderRadius: '20px',
                     fontSize: '13px',
                     fontWeight: '600',
-                    border: `2px solid ${vote.is_active ? '#c3e6cb' : '#dee2e6'}`,
+                    border: `2px solid ${vote.is_active ? 'var(--green)' : '#888'}`,
                     whiteSpace: 'nowrap'
                   }}>
                     {vote.is_active ? '✅ 진행중' : '⏸️ 종료'}
@@ -745,116 +638,71 @@ function VoteManagement() {
                 <div style={{ display: 'flex', gap: '8px', marginBottom: '12px', flexWrap: 'wrap' }}>
                   {vote.allow_multiple && (
                     <span style={{
-                      background: '#d1ecf1',
-                      color: '#0c5460',
+                      background: 'rgba(33, 150, 243, 0.3)',
+                      color: '#64b5f6',
                       padding: '5px 12px',
                       borderRadius: '15px',
                       fontSize: '12px',
                       fontWeight: '600',
-                      border: '2px solid #bee5eb'
+                      border: '2px solid #2196f3'
                     }}>
                       복수선택 (최대 {vote.max_selections}개)
                     </span>
                   )}
                   <span style={{
-                    background: '#e2d5f1',
-                    color: '#6c3483',
+                    background: 'rgba(156, 39, 176, 0.3)',
+                    color: '#ba68c8',
                     padding: '5px 12px',
                     borderRadius: '15px',
                     fontSize: '12px',
                     fontWeight: '600',
-                    border: '2px solid #d5b8e8'
+                    border: '2px solid #9c27b0'
                   }}>
                     🔒 익명
                   </span>
                 </div>
 
                 {vote.description && (
-                  <p style={{ color: '#6c757d', margin: '0 0 12px 0', fontSize: '15px', lineHeight: '1.5' }}>
+                  <p style={{ color: 'var(--lavender)', margin: '0 0 12px 0', fontSize: '15px', lineHeight: '1.5' }}>
                     {vote.description}
                   </p>
                 )}
 
-                <div style={{ display: 'flex', gap: '15px', fontSize: '14px', color: '#6c757d', marginBottom: '8px' }}>
-                  <span>📋 옵션: {vote.options.length}개</span>
-                  <span>📊 참여: {vote.total_votes || 0}명</span>
+                <div style={{ color: 'var(--lavender)', fontSize: '14px', marginBottom: '5px' }}>
+                  📋 옵션: {vote.options.length}개 | 📊 참여: {vote.total_votes || 0}명
                 </div>
-                <div style={{ fontSize: '14px', color: '#6c757d' }}>
+                <div style={{ color: 'var(--lavender)', fontSize: '14px' }}>
                   ⏰ 종료: {formatDate(vote.ends_at)}
                 </div>
               </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '10px' }}>
                 <button
+                  className="btn btn-select"
                   onClick={() => loadVoteResults(vote.id)}
-                  style={{
-                    background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                    color: 'white',
-                    border: 'none',
-                    padding: '12px',
-                    borderRadius: '8px',
-                    fontSize: '14px',
-                    fontWeight: '600',
-                    cursor: 'pointer',
-                    transition: 'all 0.3s',
-                    boxShadow: '0 3px 10px rgba(102, 126, 234, 0.3)'
-                  }}
-                  onMouseEnter={(e) => e.target.style.transform = 'translateY(-2px)'}
-                  onMouseLeave={(e) => e.target.style.transform = 'translateY(0)'}
                 >
                   📊 결과
                 </button>
                 <button
+                  className="btn btn-select"
                   onClick={() => handleEditVote(vote)}
-                  style={{
-                    background: '#17a2b8',
-                    color: 'white',
-                    border: 'none',
-                    padding: '12px',
-                    borderRadius: '8px',
-                    fontSize: '14px',
-                    fontWeight: '600',
-                    cursor: 'pointer',
-                    transition: 'all 0.3s'
-                  }}
-                  onMouseEnter={(e) => e.target.style.background = '#138496'}
-                  onMouseLeave={(e) => e.target.style.background = '#17a2b8'}
+                  style={{ background: 'rgba(33, 150, 243, 0.3)', borderColor: '#2196f3' }}
                 >
                   ✏️ 수정
                 </button>
                 <button
+                  className="btn btn-select"
                   onClick={() => handleToggleActive(vote)}
-                  style={{
-                    background: vote.is_active ? '#ffc107' : '#28a745',
-                    color: 'white',
-                    border: 'none',
-                    padding: '12px',
-                    borderRadius: '8px',
-                    fontSize: '14px',
-                    fontWeight: '600',
-                    cursor: 'pointer',
-                    transition: 'all 0.3s'
+                  style={{ 
+                    background: vote.is_active ? 'rgba(255, 152, 0, 0.3)' : 'rgba(76, 175, 80, 0.3)',
+                    borderColor: vote.is_active ? '#ff9800' : '#4caf50'
                   }}
-                  onMouseEnter={(e) => e.target.style.background = vote.is_active ? '#e0a800' : '#218838'}
-                  onMouseLeave={(e) => e.target.style.background = vote.is_active ? '#ffc107' : '#28a745'}
                 >
                   {vote.is_active ? '⏸️ 종료' : '▶️ 재개'}
                 </button>
                 <button
+                  className="btn-delete"
                   onClick={() => handleDeleteVote(vote.id)}
-                  style={{
-                    background: '#dc3545',
-                    color: 'white',
-                    border: 'none',
-                    padding: '12px',
-                    borderRadius: '8px',
-                    fontSize: '14px',
-                    fontWeight: '600',
-                    cursor: 'pointer',
-                    transition: 'all 0.3s'
-                  }}
-                  onMouseEnter={(e) => e.target.style.background = '#c82333'}
-                  onMouseLeave={(e) => e.target.style.background = '#dc3545'}
                 >
                   🗑️ 삭제
                 </button>
