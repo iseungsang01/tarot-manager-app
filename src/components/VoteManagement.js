@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
 
-function VoteManagement() {
+function VoteManagement({ onBack }) {
   const [votes, setVotes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
@@ -299,32 +299,59 @@ function VoteManagement() {
             고객 설문조사 및 투표를 관리합니다 (모든 투표는 익명으로 진행됩니다)
           </p>
         </div>
-        <button 
-          onClick={handleCreateVote}
-          style={{
-            background: 'linear-gradient(135deg, #8a2be2 0%, #9370db 100%)',
-            color: 'white',
-            border: '2px solid #ffd700',
-            padding: '15px 30px',
-            borderRadius: '10px',
-            fontSize: '16px',
-            fontWeight: '700',
-            cursor: 'pointer',
-            boxShadow: '0 5px 15px rgba(138, 43, 226, 0.4)',
-            transition: 'all 0.3s',
-            whiteSpace: 'nowrap'
-          }}
-          onMouseEnter={(e) => {
-            e.target.style.transform = 'translateY(-2px)';
-            e.target.style.boxShadow = '0 8px 20px rgba(138, 43, 226, 0.6)';
-          }}
-          onMouseLeave={(e) => {
-            e.target.style.transform = 'translateY(0)';
-            e.target.style.boxShadow = '0 5px 15px rgba(138, 43, 226, 0.4)';
-          }}
-        >
-          ➕ 새 투표 만들기
-        </button>
+        <div style={{ display: 'flex', gap: '10px' }}>
+          <button 
+            onClick={handleCreateVote}
+            style={{
+              background: 'linear-gradient(135deg, #8a2be2 0%, #9370db 100%)',
+              color: 'white',
+              border: '2px solid #ffd700',
+              padding: '15px 30px',
+              borderRadius: '10px',
+              fontSize: '16px',
+              fontWeight: '700',
+              cursor: 'pointer',
+              boxShadow: '0 5px 15px rgba(138, 43, 226, 0.4)',
+              transition: 'all 0.3s',
+              whiteSpace: 'nowrap'
+            }}
+            onMouseEnter={(e) => {
+              e.target.style.transform = 'translateY(-2px)';
+              e.target.style.boxShadow = '0 8px 20px rgba(138, 43, 226, 0.6)';
+            }}
+            onMouseLeave={(e) => {
+              e.target.style.transform = 'translateY(0)';
+              e.target.style.boxShadow = '0 5px 15px rgba(138, 43, 226, 0.4)';
+            }}
+          >
+            ➕ 새 투표 만들기
+          </button>
+          <button 
+            onClick={onBack}
+            style={{
+              background: '#8a2be2',
+              color: '#ffd700',
+              border: '2px solid #ffd700',
+              padding: '15px 30px',
+              borderRadius: '10px',
+              fontSize: '16px',
+              fontWeight: '700',
+              cursor: 'pointer',
+              transition: 'all 0.3s',
+              whiteSpace: 'nowrap'
+            }}
+            onMouseEnter={(e) => {
+              e.target.style.transform = 'translateY(-2px)';
+              e.target.style.background = '#9370db';
+            }}
+            onMouseLeave={(e) => {
+              e.target.style.transform = 'translateY(0)';
+              e.target.style.background = '#8a2be2';
+            }}
+          >
+            ✕ 닫기
+          </button>
+        </div>
       </div>
 
       {message.text && (
