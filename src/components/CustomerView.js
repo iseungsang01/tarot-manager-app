@@ -5,16 +5,15 @@ import StampCard from './StampCard';
 function CustomerView() {
   const [phone, setPhone] = useState('');
   const [nickname, setNickname] = useState('');
-  const [birthMonth, setBirthMonth] = useState('');
-  const [birthDay, setBirthDay] = useState('');
+  const [birthDate, setBirthDate] = useState(''); // YYYY-MM-DD 형식
   const [customer, setCustomer] = useState(null);
   const [message, setMessage] = useState({ text: '', type: '' });
 
   const formatPhone = (value) => {
     const numbers = value.replace(/[^0-9]/g, '');
     if (numbers.length <= 3) return numbers;
-    if (numbers.length <= 7) return `${numbers.slice(0, 3)}-${numbers.slice(3)}`;
-    return `${numbers.slice(0, 3)}-${numbers.slice(3, 7)}-${numbers.slice(7, 11)}`;
+    if (numbers.length <= 6) return `${numbers.slice(0, 3)}-${numbers.slice(3)}`;
+    return `${numbers.slice(0, 3)}-${numbers.slice(3, 6)}-${numbers.slice(6, 10)}`;
   };
 
   const handlePhoneChange = (e) => {
@@ -22,7 +21,7 @@ function CustomerView() {
   };
 
   const checkCustomer = async () => {
-    if (!phone.match(/^010-\d{4}-\d{4}$/)) {
+    if (!phone.match(/^\d{3}-\d{3,4}-\d{4}$/)) {
       showMessage('올바른 전화번호를 입력해주세요.', 'error');
       return;
     }
@@ -32,6 +31,7 @@ function CustomerView() {
         .from('customers')
         .select('*')
         .eq('phone_number', phone)
+        .is('deleted_at', null)
         .single();
 
       if (error && error.code !== 'PGRST116') {
@@ -39,13 +39,13 @@ function CustomerView() {
       }
 
       if (!data) {
-        const birthday = birthMonth && birthDay ? `${birthMonth}월 ${birthDay}일` : null;
+        // 신규 고객 등록
         const { data: newCustomer, error: insertError } = await supabase
           .from('customers')
           .insert([{
             phone_number: phone,
             nickname: nickname || '고객',
-            birthday: birthday
+            birthday: birthDate || null
           }])
           .select()
           .single();
@@ -54,10 +54,9 @@ function CustomerView() {
         data = newCustomer;
         showMessage('신규 고객으로 등록되었습니다!', 'success');
       } else {
+        // 기존 고객 정보 업데이트 확인
         const hasNicknameChange = nickname && nickname !== data.nickname;
-        
-        const inputBirthday = birthMonth && birthDay ? `${birthMonth}월 ${birthDay}일` : null;
-        const hasBirthdayChange = inputBirthday && inputBirthday !== data.birthday;
+        const hasBirthdayChange = birthDate && birthDate !== data.birthday;
 
         if (hasNicknameChange || hasBirthdayChange) {
           let warningMessage = '⚠️ 고객 정보가 변경됩니다.\n\n';
@@ -67,7 +66,9 @@ function CustomerView() {
           }
           
           if (hasBirthdayChange) {
-            warningMessage += `생일: "${data.birthday || '미등록'}" → "${inputBirthday}"\n`;
+            const oldBirthday = data.birthday ? new Date(data.birthday).toLocaleDateString('ko-KR') : '미등록';
+            const newBirthday = new Date(birthDate).toLocaleDateString('ko-KR');
+            warningMessage += `생일: "${oldBirthday}" → "${newBirthday}"\n`;
           }
           
           warningMessage += '\n정말 변경하시겠습니까?';
@@ -79,15 +80,13 @@ function CustomerView() {
             showMessage('고객 정보를 불러왔습니다.', 'success');
             return;
           }
-        }
 
-        if (nickname || (birthMonth && birthDay)) {
-          const birthday = birthMonth && birthDay ? `${birthMonth}월 ${birthDay}일` : data.birthday;
+          // 정보 업데이트
           await supabase
             .from('customers')
             .update({
               nickname: nickname || data.nickname,
-              birthday: birthday
+              birthday: birthDate || data.birthday
             })
             .eq('id', data.id);
           
@@ -98,11 +97,7 @@ function CustomerView() {
             .single();
           data = updatedData;
           
-          if (hasNicknameChange || hasBirthdayChange) {
-            showMessage('✅ 고객 정보가 변경되었습니다.', 'success');
-          } else {
-            showMessage('고객 정보를 불러왔습니다.', 'success');
-          }
+          showMessage('✅ 고객 정보가 변경되었습니다.', 'success');
         } else {
           showMessage('고객 정보를 불러왔습니다.', 'success');
         }
@@ -161,42 +156,20 @@ function CustomerView() {
 
       <div className="input-group">
         <label>생일 (선택)</label>
-        <div style={{ display: 'flex', gap: '10px' }}>
-          <select
-            value={birthMonth}
-            onChange={(e) => setBirthMonth(e.target.value)}
-            style={{ 
-              flex: 1, 
-              padding: '15px',
-              border: '2px solid #8a2be2',
-              borderRadius: '10px',
-              fontSize: '16px',
-              background: 'rgba(255, 255, 255, 0.9)'
-            }}
-          >
-            <option value="">월 선택</option>
-            {[...Array(12)].map((_, i) => (
-              <option key={i + 1} value={i + 1}>{i + 1}월</option>
-            ))}
-          </select>
-          <select
-            value={birthDay}
-            onChange={(e) => setBirthDay(e.target.value)}
-            style={{ 
-              flex: 1,
-              padding: '15px',
-              border: '2px solid #8a2be2',
-              borderRadius: '10px',
-              fontSize: '16px',
-              background: 'rgba(255, 255, 255, 0.9)'
-            }}
-          >
-            <option value="">일 선택</option>
-            {[...Array(31)].map((_, i) => (
-              <option key={i + 1} value={i + 1}>{i + 1}일</option>
-            ))}
-          </select>
-        </div>
+        <input
+          type="date"
+          value={birthDate}
+          onChange={(e) => setBirthDate(e.target.value)}
+          style={{ 
+            width: '100%',
+            padding: '15px',
+            border: '2px solid #8a2be2',
+            borderRadius: '10px',
+            fontSize: '16px',
+            background: 'rgba(255, 255, 255, 0.9)',
+            colorScheme: 'light'
+          }}
+        />
       </div>
 
       <button className="btn btn-primary" onClick={checkCustomer}>

@@ -19,29 +19,28 @@ function StampCard({ customer, onUpdate, onMessage }) {
   const [stampCount, setStampCount] = useState(1);
   const [showEditStamp, setShowEditStamp] = useState(false);
   const [editStampValue, setEditStampValue] = useState(customer.current_stamps);
+  const [availableCoupons, setAvailableCoupons] = useState(0);
 
-  const loadVisitHistory = useCallback(async () => {
+  const loadCoupons = useCallback(async () => {
     try {
       const { data, error } = await supabase
-        .from('visit_history')
+        .from('coupon_history')
         .select('*')
         .eq('customer_id', customer.id)
-        .order('visit_date', { ascending: false })
-        .limit(3);
+        .eq('is_used', false)
+        .gte('valid_until', new Date().toISOString());
       
       if (error) throw error;
-      // 방문 기록 로드 (현재는 사용하지 않지만 향후 확장 가능)
-      return data || [];
+      setAvailableCoupons(data?.length || 0);
     } catch (error) {
-      console.error('Error loading visit history:', error);
-      return [];
+      console.error('Error loading coupons:', error);
     }
   }, [customer.id]);
 
   useEffect(() => {
-    loadVisitHistory();
+    loadCoupons();
     setEditStampValue(customer.current_stamps);
-  }, [customer.id, customer.current_stamps, loadVisitHistory]);
+  }, [customer.id, customer.current_stamps, loadCoupons]);
 
   const addStamp = async () => {
     const count = parseInt(stampCount) || 1;
@@ -51,53 +50,48 @@ function StampCard({ customer, onUpdate, onMessage }) {
       return;
     }
 
-    if (customer.current_stamps >= 10) {
-      onMessage('이미 10개가 모두 찍혔습니다! 쿠폰을 발급해주세요.', 'error');
-      return;
-    }
-
-    const actualCount = Math.min(count, 10 - customer.current_stamps);
-
-    if (actualCount < count) {
-      onMessage(`10개를 초과할 수 없어 ${actualCount}개만 추가됩니다.`, 'error');
-    }
-
     try {
-      const { error: updateError } = await supabase
-        .from('customers')
-        .update({
-          current_stamps: customer.current_stamps + actualCount,
-          total_stamps: customer.total_stamps + actualCount,
-          visit_count: customer.visit_count + 1,
-          last_visit: new Date().toISOString()
-        })
-        .eq('id', customer.id);
-
-      if (updateError) throw updateError;
-
+      // visit_history에 기록 추가
+      // SQL 트리거가 자동으로 customers 업데이트 및 쿠폰 발급 처리
       const { error: historyError } = await supabase
         .from('visit_history')
         .insert([{
           customer_id: customer.id,
-          stamps_added: actualCount
+          stamps_added: count
         }]);
 
       if (historyError) throw historyError;
 
-      onUpdate();
-      loadVisitHistory();
+      // 잠시 대기 후 고객 정보 새로고침 (트리거 처리 시간)
+      setTimeout(async () => {
+        await onUpdate();
+        await loadCoupons();
+        
+        // 새로운 고객 정보 가져오기
+        const { data: updatedCustomer } = await supabase
+          .from('customers')
+          .select('*')
+          .eq('id', customer.id)
+          .single();
+
+        if (updatedCustomer) {
+          const couponsIssued = Math.floor((customer.current_stamps + count) / 10);
+          
+          if (couponsIssued > 0) {
+            onMessage(`🌟 ${couponsIssued}개의 쿠폰이 자동으로 발급되었습니다!\n현재 스탬프: ${updatedCustomer.current_stamps}/10`, 'success');
+          } else {
+            const cardNames = [];
+            for (let i = customer.current_stamps; i < customer.current_stamps + count && i < 10; i++) {
+              cardNames.push(tarotCards[i].name);
+            }
+            onMessage(`✨ ${count}개의 카드를 획득했습니다!\n${cardNames.join(', ')}`, 'success');
+          }
+        }
+      }, 500);
+
       setShowStampInput(false);
       setStampCount(1);
 
-      if (customer.current_stamps + actualCount === 10) {
-        onMessage('🌟 모든 카드를 모았습니다! 운명의 쿠폰을 받으세요!', 'success');
-      } else {
-        const cardNames = [];
-        for (let i = customer.current_stamps; i < customer.current_stamps + actualCount; i++) {
-          cardNames.push(tarotCards[i].name);
-        }
-        onMessage(`✨ ${actualCount}개의 카드를 획득했습니다!\n${cardNames.join(', ')}`, 'success');
-      }
     } catch (error) {
       console.error('Error:', error);
       onMessage('오류가 발생했습니다: ' + error.message, 'error');
@@ -107,19 +101,17 @@ function StampCard({ customer, onUpdate, onMessage }) {
   const editStampCount = async () => {
     const newCount = parseInt(editStampValue);
 
-    if (isNaN(newCount) || newCount < 0 || newCount > 10) {
-      onMessage('스탬프는 0~10개 사이로 입력해주세요.', 'error');
+    if (isNaN(newCount) || newCount < 0 || newCount >= 10) {
+      onMessage('스탬프는 0~9개 사이로 입력해주세요.', 'error');
       return;
     }
 
     try {
-      const stampDifference = newCount - customer.current_stamps;
-      
+      // current_stamps를 직접 수정
       const { error: updateError } = await supabase
         .from('customers')
         .update({
-          current_stamps: newCount,
-          total_stamps: customer.total_stamps + stampDifference
+          current_stamps: newCount
         })
         .eq('id', customer.id);
 
@@ -128,42 +120,6 @@ function StampCard({ customer, onUpdate, onMessage }) {
       onUpdate();
       setShowEditStamp(false);
       onMessage(`✅ 스탬프가 ${newCount}개로 수정되었습니다.`, 'success');
-    } catch (error) {
-      console.error('Error:', error);
-      onMessage('오류가 발생했습니다: ' + error.message, 'error');
-    }
-  };
-
-  const issueCoupon = async () => {
-    if (customer.current_stamps < 10) {
-      onMessage('스탬프 10개를 모두 모아야 합니다.', 'error');
-      return;
-    }
-
-    try {
-      const couponCode = 'COUPON' + Date.now().toString().slice(-8);
-
-      const { error: couponError } = await supabase
-        .from('coupon_history')
-        .insert([{
-          customer_id: customer.id,
-          coupon_code: couponCode
-        }]);
-
-      if (couponError) throw couponError;
-
-      const { error: updateError } = await supabase
-        .from('customers')
-        .update({
-          current_stamps: 0,
-          coupons: customer.coupons + 1
-        })
-        .eq('id', customer.id);
-
-      if (updateError) throw updateError;
-
-      onUpdate();
-      onMessage(`🎴 운명의 쿠폰이 발급되었습니다!\n쿠폰 코드: ${couponCode}`, 'success');
     } catch (error) {
       console.error('Error:', error);
       onMessage('오류가 발생했습니다: ' + error.message, 'error');
@@ -195,7 +151,12 @@ function StampCard({ customer, onUpdate, onMessage }) {
         </div>
 
         <div className="visit-info">
-          최근 방문: {new Date(customer.last_visit).toLocaleString('ko-KR')} | 이 {customer.visit_count}회 방문
+          최근 방문: {new Date(customer.last_visit).toLocaleString('ko-KR')} | 총 {customer.visit_count}회 방문
+          {availableCoupons > 0 && (
+            <div style={{ marginTop: '5px', color: '#ffd700', fontWeight: 'bold' }}>
+              🎫 사용 가능한 쿠폰: {availableCoupons}개
+            </div>
+          )}
         </div>
       </div>
 
@@ -244,26 +205,37 @@ function StampCard({ customer, onUpdate, onMessage }) {
               취소
             </button>
           </div>
+          <div style={{ 
+            marginTop: '10px', 
+            padding: '10px', 
+            background: 'rgba(138, 43, 226, 0.2)', 
+            borderRadius: '8px',
+            color: '#e0b0ff',
+            fontSize: '13px',
+            textAlign: 'center'
+          }}>
+            💡 10개 달성 시 쿠폰이 자동으로 발급됩니다
+          </div>
         </div>
       )}
 
       <button 
         className="btn btn-info" 
         onClick={() => setShowEditStamp(true)}
-        style={{ marginBottom: '10px', width: '100%' }}
+        style={{ width: '100%' }}
       >
         ✏️ 스탬프 개수 수정
       </button>
 
       {showEditStamp && (
-        <div style={{ marginBottom: '10px' }}>
+        <div style={{ marginTop: '10px' }}>
           <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
             <input
               type="number"
               value={editStampValue}
               onChange={(e) => setEditStampValue(e.target.value)}
               min="0"
-              max="10"
+              max="9"
               onKeyPress={(e) => e.key === 'Enter' && editStampCount()}
               style={{ 
                 flex: 1, 
@@ -294,15 +266,6 @@ function StampCard({ customer, onUpdate, onMessage }) {
           </div>
         </div>
       )}
-
-      <button
-        className="btn btn-warning"
-        onClick={issueCoupon}
-        disabled={customer.current_stamps < 10}
-        style={{ width: '100%' }}
-      >
-        🎁 쿠폰 발급 (10개 달성!)
-      </button>
     </div>
   );
 }

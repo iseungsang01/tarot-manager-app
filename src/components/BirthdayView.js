@@ -7,28 +7,19 @@ function BirthdayView({ onBack }) {
   const [thisMonthBirthdays, setThisMonthBirthdays] = useState([]);
   const [stats, setStats] = useState({ today: 0, week: 0, month: 0 });
 
-  const parseBirthday = (birthdayStr) => {
-    if (!birthdayStr || birthdayStr === '-') return null;
-    const match = birthdayStr.match(/(\d+)월\s*(\d+)일/);
-    if (match) {
-      return {
-        month: parseInt(match[1]),
-        day: parseInt(match[2])
-      };
-    }
-    return null;
-  };
-
-  const getDaysUntilBirthday = (month, day) => {
+  const getDaysUntilBirthday = (birthdayDate) => {
     const today = new Date();
-    const thisYear = today.getFullYear();
-    let birthday = new Date(thisYear, month - 1, day);
+    today.setHours(0, 0, 0, 0);
     
-    if (birthday < today) {
-      birthday = new Date(thisYear + 1, month - 1, day);
+    const birthday = new Date(birthdayDate);
+    const thisYear = today.getFullYear();
+    let birthdayThisYear = new Date(thisYear, birthday.getMonth(), birthday.getDate());
+    
+    if (birthdayThisYear < today) {
+      birthdayThisYear = new Date(thisYear + 1, birthday.getMonth(), birthday.getDate());
     }
     
-    const diffTime = birthday - today;
+    const diffTime = birthdayThisYear - today;
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
     return diffDays;
   };
@@ -38,29 +29,41 @@ function BirthdayView({ onBack }) {
       const { data, error } = await supabase
         .from('customers')
         .select('*')
-        .not('birthday', 'is', null);
+        .not('birthday', 'is', null)
+        .is('deleted_at', null);
 
       if (error) throw error;
 
       const today = new Date();
-      const todayMonth = today.getMonth() + 1;
+      today.setHours(0, 0, 0, 0);
+      const todayMonth = today.getMonth();
       const todayDay = today.getDate();
 
       const todayList = [];
       const weekList = [];
       const monthList = [];
 
-      data.forEach(customer => {
-        const birthday = parseBirthday(customer.birthday);
-        if (!birthday) return;
+      // 각 고객의 쿠폰 개수도 함께 조회
+      const customersWithCoupons = await Promise.all(
+        data.map(async (customer) => {
+          const { data: coupons } = await supabase
+            .from('coupon_history')
+            .select('id')
+            .eq('customer_id', customer.id);
+          
+          return { ...customer, coupons: coupons?.length || 0 };
+        })
+      );
 
-        const daysUntil = getDaysUntilBirthday(birthday.month, birthday.day);
+      customersWithCoupons.forEach(customer => {
+        const birthday = new Date(customer.birthday);
+        const daysUntil = getDaysUntilBirthday(customer.birthday);
 
-        if (birthday.month === todayMonth && birthday.day === todayDay) {
+        if (birthday.getMonth() === todayMonth && birthday.getDate() === todayDay) {
           todayList.push(customer);
         } else if (daysUntil >= 0 && daysUntil <= 7) {
           weekList.push({ customer, daysUntil });
-        } else if (birthday.month === todayMonth) {
+        } else if (birthday.getMonth() === todayMonth) {
           monthList.push({ customer, daysUntil });
         }
       });
@@ -86,17 +89,18 @@ function BirthdayView({ onBack }) {
   }, [loadBirthdays]);
 
   const issueBirthdayCoupon = async (customer) => {
-    const birthday = parseBirthday(customer.birthday);
-    if (!birthday) {
+    if (!customer.birthday) {
       alert('생일 정보가 없습니다.');
       return;
     }
 
     try {
       const thisYear = new Date().getFullYear();
-      const birthdayThisYear = new Date(thisYear, birthday.month - 1, birthday.day);
+      const birthday = new Date(customer.birthday);
+      const birthdayThisYear = new Date(thisYear, birthday.getMonth(), birthday.getDate());
       const startOfYear = new Date(thisYear, 0, 1);
       
+      // 올해 이미 생일 쿠폰을 받았는지 확인
       const { data: existingCoupon, error: checkError } = await supabase
         .from('coupon_history')
         .select('*')
@@ -115,20 +119,17 @@ function BirthdayView({ onBack }) {
 
       if (!window.confirm(
         `${customer.nickname}님께 생일 축하 쿠폰을 발급하시겠습니까?\n\n` +
-        `유효기간: 생일 전후 7일 (이 15일간 사용 가능)\n` +
-        `생일: ${customer.birthday}`
+        `유효기간: 생일로부터 3개월\n` +
+        `생일: ${new Date(customer.birthday).toLocaleDateString('ko-KR')}`
       )) {
         return;
       }
 
       const couponCode = 'BIRTHDAY' + Date.now().toString().slice(-8);
       
-      const validFrom = new Date(birthdayThisYear);
-      validFrom.setDate(validFrom.getDate() - 7);
-      validFrom.setHours(0, 0, 0, 0);
-      
+      // 생일 3개월 후까지 유효
       const validUntil = new Date(birthdayThisYear);
-      validUntil.setDate(validUntil.getDate() + 7);
+      validUntil.setMonth(validUntil.getMonth() + 3);
       validUntil.setHours(23, 59, 59, 999);
 
       const { error: couponError } = await supabase
@@ -136,28 +137,17 @@ function BirthdayView({ onBack }) {
         .insert([{
           customer_id: customer.id,
           coupon_code: couponCode,
-          valid_from: validFrom.toISOString(),
           valid_until: validUntil.toISOString()
         }]);
 
       if (couponError) throw couponError;
 
-      const { error: updateError } = await supabase
-        .from('customers')
-        .update({
-          coupons: customer.coupons + 1
-        })
-        .eq('id', customer.id);
-
-      if (updateError) throw updateError;
-
       alert(
         `🎂 생일 축하 쿠폰이 발급되었습니다!\n\n` +
         `고객: ${customer.nickname} (${customer.phone_number})\n` +
         `쿠폰 코드: ${couponCode}\n\n` +
-        `유효기간:\n` +
-        `${validFrom.toLocaleDateString('ko-KR')} ~ ${validUntil.toLocaleDateString('ko-KR')}\n` +
-        `(이 15일간)`
+        `유효기간: ${validUntil.toLocaleDateString('ko-KR')}까지\n` +
+        `(생일로부터 3개월)`
       );
       
       loadBirthdays();
@@ -172,7 +162,9 @@ function BirthdayView({ onBack }) {
       <div className="birthday-icon">{isToday ? '🎉' : '🎂'}</div>
       <div className="customer-name">{customer.nickname}</div>
       <div className="customer-phone">{customer.phone_number}</div>
-      <div className="birthday-date">{customer.birthday}</div>
+      <div className="birthday-date">
+        {new Date(customer.birthday).toLocaleDateString('ko-KR', { month: 'long', day: 'numeric' })}
+      </div>
       <div className="customer-info">
         {isToday ? '🎈 오늘이 생일입니다!' : daysUntil !== null ? `📅 ${daysUntil}일 후` : ''}
         <br />스탬프: {customer.current_stamps}/10 | 쿠폰: {customer.coupons}개

@@ -8,7 +8,8 @@ function CouponManagement({ onBack }) {
   const [stats, setStats] = useState({ 
     total: 0, 
     valid: 0, 
-    expired: 0, 
+    expired: 0,
+    used: 0,
     birthday: 0,
     regular: 0 
   });
@@ -35,17 +36,16 @@ function CouponManagement({ onBack }) {
       let filteredData = data || [];
       if (filterType === 'valid') {
         filteredData = filteredData.filter(coupon => {
-          const validFrom = coupon.valid_from ? new Date(coupon.valid_from) : null;
           const validUntil = coupon.valid_until ? new Date(coupon.valid_until) : null;
-          const isValidFrom = !validFrom || validFrom <= now;
-          const isValidUntil = !validUntil || validUntil >= now;
-          return isValidFrom && isValidUntil;
+          return !coupon.is_used && (!validUntil || validUntil >= now);
         });
       } else if (filterType === 'expired') {
         filteredData = filteredData.filter(coupon => {
           const validUntil = coupon.valid_until ? new Date(coupon.valid_until) : null;
-          return validUntil && validUntil < now;
+          return validUntil && validUntil < now && !coupon.is_used;
         });
+      } else if (filterType === 'used') {
+        filteredData = filteredData.filter(coupon => coupon.is_used);
       }
 
       setCoupons(filteredData);
@@ -53,16 +53,13 @@ function CouponManagement({ onBack }) {
       const stats = data.reduce((acc, coupon) => {
         acc.total++;
         
-        const validFrom = coupon.valid_from ? new Date(coupon.valid_from) : null;
         const validUntil = coupon.valid_until ? new Date(coupon.valid_until) : null;
-        const isValidFrom = !validFrom || validFrom <= now;
-        const isValidUntil = !validUntil || validUntil >= now;
         
-        if (isValidFrom && isValidUntil) {
+        if (coupon.is_used) {
+          acc.used++;
+        } else if (!validUntil || validUntil >= now) {
           acc.valid++;
-        }
-        
-        if (validUntil && validUntil < now) {
+        } else if (validUntil && validUntil < now) {
           acc.expired++;
         }
         
@@ -73,7 +70,7 @@ function CouponManagement({ onBack }) {
         }
         
         return acc;
-      }, { total: 0, valid: 0, expired: 0, birthday: 0, regular: 0 });
+      }, { total: 0, valid: 0, expired: 0, used: 0, birthday: 0, regular: 0 });
 
       setStats(stats);
     } catch (error) {
@@ -121,6 +118,7 @@ function CouponManagement({ onBack }) {
         .from('coupon_history')
         .delete()
         .lt('valid_until', now)
+        .eq('is_used', false)
         .not('valid_until', 'is', null);
 
       if (error) throw error;
@@ -133,25 +131,53 @@ function CouponManagement({ onBack }) {
     }
   };
 
+  const toggleCouponUsed = async (coupon) => {
+    const newUsedStatus = !coupon.is_used;
+    const action = newUsedStatus ? '사용 처리' : '미사용으로 변경';
+    
+    if (!window.confirm(`쿠폰 ${coupon.coupon_code}을(를) ${action}하시겠습니까?`)) {
+      return;
+    }
+
+    try {
+      const updateData = {
+        is_used: newUsedStatus,
+        used_at: newUsedStatus ? new Date().toISOString() : null
+      };
+
+      const { error } = await supabase
+        .from('coupon_history')
+        .update(updateData)
+        .eq('id', coupon.id);
+
+      if (error) throw error;
+      
+      alert(`✅ 쿠폰이 ${action}되었습니다.`);
+      loadCoupons();
+    } catch (error) {
+      console.error('Error toggling coupon:', error);
+      alert('처리 중 오류가 발생했습니다.');
+    }
+  };
+
   const getCouponStatus = (coupon) => {
     const now = new Date();
-    const validFrom = coupon.valid_from ? new Date(coupon.valid_from) : null;
     const validUntil = coupon.valid_until ? new Date(coupon.valid_until) : null;
 
+    if (coupon.is_used) {
+      return { label: '✅ 사용완료', class: 'badge-success' };
+    }
+    
     if (validUntil && validUntil < now) {
       return { label: '⏰ 만료', class: 'badge-secondary' };
     }
     
-    if (validFrom && validFrom > now) {
-      return { label: '⏳ 대기중', class: 'badge-info' };
-    }
-    
-    return { label: '✅ 사용가능', class: 'badge-success' };
+    return { label: '💳 사용가능', class: 'badge-warning' };
   };
 
   const getCouponType = (couponCode) => {
     if (couponCode.startsWith('BIRTHDAY')) {
-      return { label: '🎂 생일쿠폰', class: 'badge-warning' };
+      return { label: '🎂 생일쿠폰', class: 'badge-info' };
     }
     return { label: '⭐ 일반쿠폰', class: 'badge-normal' };
   };
@@ -188,8 +214,8 @@ function CouponManagement({ onBack }) {
           <div className="stat-label">사용가능</div>
         </div>
         <div className="stat-box">
-          <div className="stat-number">{stats.birthday}</div>
-          <div className="stat-label">생일쿠폰</div>
+          <div className="stat-number">{stats.used}</div>
+          <div className="stat-label">사용완료</div>
         </div>
         <div className="stat-box">
           <div className="stat-number">{stats.expired}</div>
@@ -212,6 +238,13 @@ function CouponManagement({ onBack }) {
             style={{ width: 'auto', padding: '10px 20px' }}
           >
             사용가능
+          </button>
+          <button 
+            className={`btn ${filterType === 'used' ? 'btn-primary' : 'btn-info'}`}
+            onClick={() => setFilterType('used')}
+            style={{ width: 'auto', padding: '10px 20px' }}
+          >
+            사용완료
           </button>
           <button 
             className={`btn ${filterType === 'expired' ? 'btn-primary' : 'btn-info'}`}
@@ -242,6 +275,7 @@ function CouponManagement({ onBack }) {
           <p>
             {filterType === 'valid' && '현재 사용가능한 쿠폰이 없습니다.'}
             {filterType === 'expired' && '만료된 쿠폰이 없습니다.'}
+            {filterType === 'used' && '사용완료된 쿠폰이 없습니다.'}
             {filterType === 'all' && '발급된 쿠폰이 없습니다.'}
           </p>
         </div>
@@ -255,8 +289,8 @@ function CouponManagement({ onBack }) {
                 <th>쿠폰코드</th>
                 <th>고객</th>
                 <th>발급일</th>
-                <th>사용가능 시작</th>
                 <th>유효기간</th>
+                <th>사용일</th>
                 <th>관리</th>
               </tr>
             </thead>
@@ -288,15 +322,6 @@ function CouponManagement({ onBack }) {
                     </td>
                     <td>{formatDate(coupon.issued_at)}</td>
                     <td>
-                      {coupon.valid_from ? (
-                        <span style={{ color: '#e0b0ff' }}>
-                          {formatDate(coupon.valid_from)}
-                        </span>
-                      ) : (
-                        <span style={{ color: '#90EE90' }}>즉시</span>
-                      )}
-                    </td>
-                    <td>
                       {coupon.valid_until ? (
                         <span style={{ 
                           color: new Date(coupon.valid_until) < new Date() ? '#ffcccb' : '#e0b0ff' 
@@ -308,7 +333,23 @@ function CouponManagement({ onBack }) {
                       )}
                     </td>
                     <td>
+                      {coupon.used_at ? (
+                        <span style={{ color: '#90EE90' }}>
+                          {formatDate(coupon.used_at)}
+                        </span>
+                      ) : (
+                        '-'
+                      )}
+                    </td>
+                    <td>
                       <div className="action-buttons">
+                        <button 
+                          className="btn-edit"
+                          onClick={() => toggleCouponUsed(coupon)}
+                          title={coupon.is_used ? "미사용으로 변경" : "사용 처리"}
+                        >
+                          {coupon.is_used ? '↩️' : '✓'}
+                        </button>
                         <button 
                           className="btn-delete"
                           onClick={() => deleteCoupon(coupon.id, coupon.coupon_code)}

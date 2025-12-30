@@ -25,7 +25,33 @@ function StoreRequestView({ onBack }) {
       const { data, error } = await query;
 
       if (error) throw error;
-      setRequests(data || []);
+      
+      // 로컬 스토리지에서 추가 정보 가져오기
+      const requestsWithLocalData = (data || []).map(request => {
+        const responseKey = `request_response_${request.id}`;
+        const customerKey = `request_customer_${request.id}`;
+        
+        const storedResponse = localStorage.getItem(responseKey);
+        const storedCustomer = localStorage.getItem(customerKey);
+        
+        let customerData = {};
+        if (storedCustomer) {
+          try {
+            customerData = JSON.parse(storedCustomer);
+          } catch (e) {
+            console.error('Parse error:', e);
+          }
+        }
+        
+        return {
+          ...request,
+          admin_response: storedResponse || request.admin_response,
+          customer_nickname: customerData.nickname || request.customer_nickname || '익명',
+          customer_phone: customerData.phone || request.customer_phone || '-'
+        };
+      });
+      
+      setRequests(requestsWithLocalData);
     } catch (error) {
       console.error('Error loading store requests:', error);
       alert('매장 제안을 불러오는 중 오류가 발생했습니다.');
@@ -42,10 +68,7 @@ function StoreRequestView({ onBack }) {
     try {
       const { error } = await supabase
         .from('bug_reports')
-        .update({ 
-          status: newStatus,
-          updated_at: new Date().toISOString()
-        })
+        .update({ status: newStatus })
         .eq('id', id);
 
       if (error) throw error;
@@ -73,16 +96,17 @@ function StoreRequestView({ onBack }) {
     }
 
     try {
+      // 상태를 완료로 변경
       const { error } = await supabase
         .from('bug_reports')
-        .update({ 
-          admin_response: adminResponse,
-          status: '완료',
-          updated_at: new Date().toISOString()
-        })
+        .update({ status: '완료' })
         .eq('id', selectedRequest.id);
 
       if (error) throw error;
+      
+      // 로컬 스토리지에 답변 저장
+      const responseKey = `request_response_${selectedRequest.id}`;
+      localStorage.setItem(responseKey, adminResponse);
       
       alert('✅ 답변이 저장되었고 상태가 "완료"로 변경되었습니다.');
       setShowResponseModal(false);
@@ -107,6 +131,10 @@ function StoreRequestView({ onBack }) {
         .eq('id', id);
 
       if (error) throw error;
+      
+      // 로컬 스토리지 정보도 삭제
+      localStorage.removeItem(`request_response_${id}`);
+      localStorage.removeItem(`request_customer_${id}`);
       
       alert('🗑️ 매장 제안이 삭제되었습니다.');
       loadStoreRequests();
@@ -235,9 +263,9 @@ function StoreRequestView({ onBack }) {
                     </span>
                   </td>
                   <td>
-                    <div>{request.customer_nickname || '익명'}</div>
+                    <div>{request.customer_nickname}</div>
                     <div style={{ fontSize: '12px', opacity: 0.7 }}>
-                      {request.customer_phone || '-'}
+                      {request.customer_phone}
                     </div>
                   </td>
                   <td style={{ maxWidth: '200px' }}>
@@ -305,7 +333,7 @@ function StoreRequestView({ onBack }) {
             
             <div className="request-detail" style={{ marginBottom: '20px', padding: '15px', background: 'rgba(138, 43, 226, 0.1)', borderRadius: '10px' }}>
               <div style={{ marginBottom: '10px' }}>
-                <strong style={{ color: 'gold' }}>고객:</strong> {selectedRequest.customer_nickname || '익명'} ({selectedRequest.customer_phone || '-'})
+                <strong style={{ color: 'gold' }}>고객:</strong> {selectedRequest.customer_nickname} ({selectedRequest.customer_phone})
               </div>
               <div style={{ marginBottom: '10px' }}>
                 <strong style={{ color: 'gold' }}>제목:</strong> {selectedRequest.title}
