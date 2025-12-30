@@ -5,9 +5,11 @@ import StampCard from './StampCard';
 function CustomerView() {
   const [phone, setPhone] = useState('');
   const [nickname, setNickname] = useState('');
-  const [birthDate, setBirthDate] = useState(''); // YYYY-MM-DD
+  const [birthDate, setBirthDate] = useState(''); // YYYY-MM-DD 형식
   const [customer, setCustomer] = useState(null);
   const [message, setMessage] = useState({ text: '', type: '' });
+  
+  const today = new Date().toISOString().split('T')[0];
 
   // 3-4-4 포맷팅 함수
   const formatPhone = (value) => {
@@ -21,32 +23,26 @@ function CustomerView() {
     setPhone(formatPhone(e.target.value));
   };
 
-  const showMessage = (text, type) => {
-    setMessage({ text, type });
-    setTimeout(() => setMessage({ text: '', type: '' }), 3000);
-  };
-
-  // 고객 조회 및 등록/업데이트 로직
   const checkCustomer = async () => {
-    // 유효성 검사 (010-0000-0000 형식)
     if (!phone.match(/^\d{3}-\d{4}-\d{4}$/)) {
-      showMessage('올바른 전화번호(010-0000-0000)를 입력해주세요.', 'error');
+      showMessage('올바른 전화번호를 입력해주세요.', 'error');
       return;
     }
 
     try {
-      // 1. 기존 고객 조회
       let { data, error } = await supabase
         .from('customers')
         .select('*')
         .eq('phone_number', phone)
         .is('deleted_at', null)
-        .maybeSingle(); // 데이터가 없어도 에러를 던지지 않음
+        .single();
 
-      if (error) throw error;
+      if (error && error.code !== 'PGRST116') {
+        throw error;
+      }
 
       if (!data) {
-        // 2. 신규 고객 등록 (비밀 헤더 덕분에 RLS 통과)
+        // 신규 고객 등록
         const { data: newCustomer, error: insertError } = await supabase
           .from('customers')
           .insert([{
@@ -59,45 +55,69 @@ function CustomerView() {
 
         if (insertError) throw insertError;
         data = newCustomer;
-        showMessage('🔮 신규 고객으로 등록되었습니다!', 'success');
+        showMessage('신규 고객으로 등록되었습니다!', 'success');
       } else {
-        // 3. 기존 고객 정보 변경 확인
+        // 기존 고객 정보 업데이트 확인
         const hasNicknameChange = nickname && nickname !== data.nickname;
         const hasBirthdayChange = birthDate && birthDate !== data.birthday;
 
         if (hasNicknameChange || hasBirthdayChange) {
-          let warningMessage = '⚠️ 기존 정보를 수정하시겠습니까?\n\n';
-          if (hasNicknameChange) warningMessage += `닉네임: ${data.nickname} → ${nickname}\n`;
-          if (hasBirthdayChange) warningMessage += `생일: ${data.birthday || '미등록'} → ${birthDate}\n`;
-
-          if (window.confirm(warningMessage)) {
-            const { data: updatedData, error: updateError } = await supabase
-              .from('customers')
-              .update({
-                nickname: nickname || data.nickname,
-                birthday: birthDate || data.birthday
-              })
-              .eq('id', data.id)
-              .select()
-              .single();
-
-            if (updateError) throw updateError;
-            data = updatedData;
-            showMessage('✅ 정보가 업데이트되었습니다.', 'success');
+          let warningMessage = '⚠️ 고객 정보가 변경됩니다.\n\n';
+          
+          if (hasNicknameChange) {
+            warningMessage += `닉네임: "${data.nickname}" → "${nickname}"\n`;
           }
+          
+          if (hasBirthdayChange) {
+            const oldBirthday = data.birthday ? new Date(data.birthday).toLocaleDateString('ko-KR') : '미등록';
+            const newBirthday = new Date(birthDate).toLocaleDateString('ko-KR');
+            warningMessage += `생일: "${oldBirthday}" → "${newBirthday}"\n`;
+          }
+          
+          warningMessage += '\n정말 변경하시겠습니까?';
+          
+          const confirmChange = window.confirm(warningMessage);
+          
+          if (!confirmChange) {
+            setCustomer(data);
+            showMessage('고객 정보를 불러왔습니다.', 'success');
+            return;
+          }
+
+          // 정보 업데이트
+          await supabase
+            .from('customers')
+            .update({
+              nickname: nickname || data.nickname,
+              birthday: birthDate || data.birthday
+            })
+            .eq('id', data.id);
+          
+          const { data: updatedData } = await supabase
+            .from('customers')
+            .select('*')
+            .eq('id', data.id)
+            .single();
+          data = updatedData;
+          
+          showMessage('✅ 고객 정보가 변경되었습니다.', 'success');
         } else {
-          showMessage('반갑습니다! 정보를 불러왔습니다.', 'success');
+          showMessage('고객 정보를 불러왔습니다.', 'success');
         }
       }
 
       setCustomer(data);
     } catch (error) {
       console.error('Error:', error);
-      showMessage('오류: ' + error.message, 'error');
+      showMessage('오류가 발생했습니다: ' + error.message, 'error');
     }
   };
 
-  // 스탬프 추가 등 작업 후 최신화
+  const showMessage = (text, type) => {
+    setMessage({ text, type });
+    setTimeout(() => setMessage({ text: '', type: '' }), 3000);
+  };
+
   const refreshCustomer = async () => {
     if (customer) {
       const { data } = await supabase
@@ -111,63 +131,68 @@ function CustomerView() {
 
   return (
     <div className="customer-view">
-      <div className="header-container">
-        <h1>🔮 타로 스탬프</h1>
-        <p className="subtitle">10장의 카드를 모아 운명의 쿠폰을 받으세요</p>
+      <h1>🔮 타로 스탬프</h1>
+      <p className="subtitle">10장의 카드를 모아 운명의 쿠폰을 받으세요</p>
+
+      <div className="input-group">
+        <label>전화번호</label>
+        <input
+          type="tel"
+          value={phone}
+          onChange={handlePhoneChange}
+          placeholder="010-1234-5678"
+          maxLength="13"
+          onKeyPress={(e) => e.key === 'Enter' && checkCustomer()}
+        />
       </div>
 
-      <div className="form-container">
-        <div className="input-group">
-          <label>전화번호</label>
-          <input
-            type="tel"
-            value={phone}
-            onChange={handlePhoneChange}
-            placeholder="010-0000-0000"
-            maxLength="13"
-          />
-        </div>
-
-        <div className="input-group">
-          <label>닉네임 (선택)</label>
-          <input
-            type="text"
-            value={nickname}
-            onChange={(e) => setNickname(e.target.value)}
-            placeholder="닉네임을 입력하세요"
-          />
-        </div>
-
-        <div className="input-group">
-          <label>생일 (선택)</label>
-          <input
-            type="date"
-            value={birthDate}
-            onChange={(e) => setBirthDate(e.target.value)}
-            className="date-input"
-          />
-        </div>
-
-        <button className="btn-search" onClick={checkCustomer}>
-          조회하기
-        </button>
+      <div className="input-group">
+        <label>닉네임 (선택)</label>
+        <input
+          type="text"
+          value={nickname}
+          onChange={(e) => setNickname(e.target.value)}
+          placeholder="타로러버"
+          onKeyPress={(e) => e.key === 'Enter' && checkCustomer()}
+        />
       </div>
+
+      <div className="input-group">
+        <label>생일 (선택)</label>
+        <input
+          type="date"
+          value={birthDate}
+          onChange={(e) => setBirthDate(e.target.value)}
+          max={today}        // 오늘 이후 날짜 선택 불가 (연도 4자리 고정 효과)
+          min="1900-01-01"   // 너무 과거 날짜 방지
+          style={{ 
+            width: '100%',
+            padding: '15px',
+            border: '2px solid #8a2be2',
+            borderRadius: '10px',
+            fontSize: '16px',
+            background: 'rgba(255, 255, 255, 0.9)',
+            colorScheme: 'light'
+          }}
+        />
+      </div>
+
+      <button className="btn btn-primary" onClick={checkCustomer}>
+        조회하기
+      </button>
 
       {message.text && (
-        <div className={`status-message ${message.type}`}>
+        <div className={`message ${message.type}`}>
           {message.text}
         </div>
       )}
 
-      {/* 고객 정보가 있을 때만 스탬프 카드 표시 */}
       {customer && (
-        <div className="stamp-card-section">
-          <StampCard 
-            customer={customer} 
-            onUpdate={refreshCustomer}
-            onMessage={showMessage}
-          />
-        </div>
+        <StampCard 
+          customer={customer} 
+          onUpdate={refreshCustomer}
+          onMessage={showMessage}
+        />
       )}
     </div>
   );
