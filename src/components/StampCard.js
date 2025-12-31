@@ -62,7 +62,7 @@ function StampCard({ customer, onUpdate, onMessage }) {
     }
 
     try {
-      // visit_history에 INSERT하면 트리거가 자동으로 customers 업데이트
+      // ✅ 수정: visit_history에만 삽입 (트리거가 자동으로 customers 테이블 업데이트)
       const { error: historyError } = await supabaseAdmin
         .from('visit_history')
         .insert([{
@@ -103,7 +103,7 @@ function StampCard({ customer, onUpdate, onMessage }) {
     try {
       const stampDifference = newCount - customer.current_stamps;
       
-      // 직접 수정하는 경우는 트리거를 거치지 않고 customers 테이블 업데이트
+      // ✅ 수정 기능은 트리거 없이 직접 업데이트 (정상 동작)
       const { error: updateError } = await supabaseAdmin
         .from('customers')
         .update({
@@ -136,8 +136,7 @@ function StampCard({ customer, onUpdate, onMessage }) {
         .from('coupon_history')
         .insert([{
           customer_id: customer.id,
-          coupon_code: couponCode,
-          valid_until: null // 무제한 유효기간
+          coupon_code: couponCode
         }]);
 
       if (couponError) throw couponError;
