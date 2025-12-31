@@ -269,7 +269,7 @@ function VoteManagement({ onBack }) {
   return (
     <div style={{ 
       padding: '30px', 
-      maxWidth: '1', 
+      maxWidth: '100%', 
       margin: '0 auto',
       background: 'linear-gradient(135deg, #1a0033 0%, #2d004d 100%)',
       minHeight: '100vh',
