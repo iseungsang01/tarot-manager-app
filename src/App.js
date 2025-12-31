@@ -6,7 +6,7 @@ import NoticeManagement from './components/NoticeManagement';
 import StoreRequestView from './components/StoreRequestView';
 import CouponManagement from './components/CouponManagement';
 import VoteManagement from './components/VoteManagement';
-import { supabase, AdminPassWord } from './supabaseClient';
+import { AdminPassWord } from './supabaseClient';
 import './App.css';
 
 function App() {

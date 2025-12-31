@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { supabase } from '../supabaseClient';
+import { supabaseAdmin } from '../supabaseClient';
 import * as XLSX from 'xlsx';
 
 function AdminView({ onClose, onShowBirthday, onShowNotice, onShowCoupon, onShowStoreRequest, onShowVote }) {
   const [customers, setCustomers] = useState([]);
-  const [stats, setStats] = useState({ total: 0, totalVisits: 0, totalCoupons: 0 });
+  const [stats, setStats] = useState({ total: 0, totalStamps: 0, totalCoupons: 0 });
   const [sortConfig, setSortConfig] = useState({ key: 'last_visit', direction: 'desc' });
 
   useEffect(() => {
@@ -13,59 +13,45 @@ function AdminView({ onClose, onShowBirthday, onShowNotice, onShowCoupon, onShow
 
   const loadCustomers = async () => {
     try {
-      // 고객 정보 로드
-      const { data: customersData, error: customersError } = await supabase
+      const { data, error } = await supabaseAdmin
         .from('customers')
         .select('*')
         .is('deleted_at', null)
         .order('last_visit', { ascending: false });
 
-      if (customersError) throw customersError;
+      if (error) throw error;
 
-      // 각 고객의 쿠폰 개수 계산
-      const customersWithCoupons = await Promise.all(
-        customersData.map(async (customer) => {
-          const { data: coupons, error: couponError } = await supabase
-            .from('coupon_history')
-            .select('id')
-            .eq('customer_id', customer.id);
+      setCustomers(data);
 
-          if (couponError) {
-            console.error('Coupon error:', couponError);
-            return { ...customer, coupons: 0 };
-          }
+      const stats = data.reduce((acc, customer) => ({
+        total: acc.total + 1,
+        totalStamps: acc.totalStamps + customer.total_stamps,
+        totalCoupons: acc.totalCoupons + customer.coupons
+      }), { total: 0, totalStamps: 0, totalCoupons: 0 });
 
-          return { ...customer, coupons: coupons?.length || 0 };
-        })
-      );
-
-      setCustomers(customersWithCoupons);
-
-      // 통계 계산
-      const totalCoupons = customersWithCoupons.reduce((sum, c) => sum + c.coupons, 0);
-      const totalVisits = customersWithCoupons.reduce((sum, c) => sum + c.visit_count, 0);
-
-      setStats({
-        total: customersWithCoupons.length,
-        totalVisits: totalVisits,
-        totalCoupons: totalCoupons
-      });
+      setStats(stats);
     } catch (error) {
       console.error('Error loading customers:', error);
     }
   };
 
   const exportToExcel = () => {
-    const exportData = customers.map(c => ({
-      '닉네임': c.nickname,
-      '전화번호': c.phone_number,
-      '생일': c.birthday ? new Date(c.birthday).toLocaleDateString('ko-KR') : '-',
-      '현재 스탬프': c.current_stamps,
-      '발급된 쿠폰': c.coupons,
-      '총 방문 횟수': c.visit_count,
-      '가입일': new Date(c.created_at).toLocaleString('ko-KR'),
-      '최근 방문일': new Date(c.last_visit).toLocaleString('ko-KR')
-    }));
+    const exportData = customers.map(c => {
+      const birthday = c.birthday ? new Date(c.birthday) : null;
+      const birthdayStr = birthday ? `${birthday.getMonth() + 1}월 ${birthday.getDate()}일` : '-';
+
+      return {
+        '닉네임': c.nickname,
+        '전화번호': c.phone_number,
+        '생일': birthdayStr,
+        '현재 스탬프': c.current_stamps,
+        '누적 스탬프': c.total_stamps,
+        '발급된 쿠폰': c.coupons,
+        '총 방문 횟수': c.visit_count,
+        '가입일': new Date(c.created_at).toLocaleString('ko-KR'),
+        '최근 방문일': new Date(c.last_visit).toLocaleString('ko-KR')
+      };
+    });
 
     const ws = XLSX.utils.json_to_sheet(exportData);
     const wb = XLSX.utils.book_new();
@@ -78,19 +64,19 @@ function AdminView({ onClose, onShowBirthday, onShowNotice, onShowCoupon, onShow
   };
 
   const clearAllData = async () => {
-    if (!window.confirm('정말 모든 데이터를 삭제하시겠습니까?\n이 작업은 되돌릴 수 없습니다.')) {
+    if (!window.confirm('정말 모든 데이터를 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.')) {
       return;
     }
 
     try {
-      // deleted_at을 현재 시간으로 설정 (소프트 삭제)
-      const { error } = await supabase
+      // 소프트 삭제 (deleted_at 설정)
+      const { error } = await supabaseAdmin
         .from('customers')
         .update({ deleted_at: new Date().toISOString() })
         .is('deleted_at', null);
 
       if (error) throw error;
-
+      
       loadCustomers();
       alert('모든 데이터가 삭제되었습니다.');
     } catch (error) {
@@ -109,15 +95,6 @@ function AdminView({ onClose, onShowBirthday, onShowNotice, onShowCoupon, onShow
     if (avgDays < 7) return `약 ${Math.round(avgDays)}일마다`;
     if (avgDays < 30) return `약 ${Math.round(avgDays / 7)}주마다`;
     return `약 ${Math.round(avgDays / 30)}개월마다`;
-  };
-
-  const parseBirthday = (birthdayDate) => {
-    if (!birthdayDate) return null;
-    const date = new Date(birthdayDate);
-    return {
-      month: date.getMonth() + 1,
-      day: date.getDate()
-    };
   };
 
   const handleSort = (key) => {
@@ -144,24 +121,31 @@ function AdminView({ onClose, onShowBirthday, onShowNotice, onShowCoupon, onShow
           bValue = b.phone_number;
           break;
         case 'birthday':
-          const aBirthday = parseBirthday(a.birthday);
-          const bBirthday = parseBirthday(b.birthday);
+          const aBirthday = a.birthday ? new Date(a.birthday) : null;
+          const bBirthday = b.birthday ? new Date(b.birthday) : null;
           
           if (!aBirthday && !bBirthday) return 0;
           if (!aBirthday) return 1;
           if (!bBirthday) return -1;
           
-          if (aBirthday.month !== bBirthday.month) {
-            aValue = aBirthday.month;
-            bValue = bBirthday.month;
+          const aMonth = aBirthday.getMonth();
+          const bMonth = bBirthday.getMonth();
+          
+          if (aMonth !== bMonth) {
+            aValue = aMonth;
+            bValue = bMonth;
           } else {
-            aValue = aBirthday.day;
-            bValue = bBirthday.day;
+            aValue = aBirthday.getDate();
+            bValue = bBirthday.getDate();
           }
           break;
         case 'current_stamps':
           aValue = a.current_stamps;
           bValue = b.current_stamps;
+          break;
+        case 'total_stamps':
+          aValue = a.total_stamps;
+          bValue = b.total_stamps;
           break;
         case 'coupons':
           aValue = a.coupons;
@@ -206,6 +190,12 @@ function AdminView({ onClose, onShowBirthday, onShowNotice, onShowCoupon, onShow
     return sortConfig.direction === 'asc' ? ' ▲' : ' ▼';
   };
 
+  const formatBirthday = (birthdayDate) => {
+    if (!birthdayDate) return '-';
+    const date = new Date(birthdayDate);
+    return `${date.getMonth() + 1}월 ${date.getDate()}일`;
+  };
+
   return (
     <div className="admin-view">
       <div className="admin-header">
@@ -245,8 +235,8 @@ function AdminView({ onClose, onShowBirthday, onShowNotice, onShowCoupon, onShow
           <div className="stat-label">총 고객 수</div>
         </div>
         <div className="stat-box">
-          <div className="stat-number">{stats.totalVisits}</div>
-          <div className="stat-label">총 방문 횟수</div>
+          <div className="stat-number">{stats.totalStamps}</div>
+          <div className="stat-label">누적 스탬프</div>
         </div>
         <div className="stat-box">
           <div className="stat-number">{stats.totalCoupons}</div>
@@ -271,6 +261,9 @@ function AdminView({ onClose, onShowBirthday, onShowNotice, onShowCoupon, onShow
               <th onClick={() => handleSort('current_stamps')} style={{ cursor: 'pointer' }}>
                 현재 스탬프{getSortIcon('current_stamps')}
               </th>
+              <th onClick={() => handleSort('total_stamps')} style={{ cursor: 'pointer' }}>
+                누적 스탬프{getSortIcon('total_stamps')}
+              </th>
               <th onClick={() => handleSort('coupons')} style={{ cursor: 'pointer' }}>
                 쿠폰{getSortIcon('coupons')}
               </th>
@@ -288,7 +281,7 @@ function AdminView({ onClose, onShowBirthday, onShowNotice, onShowCoupon, onShow
           <tbody>
             {sortedCustomers.length === 0 ? (
               <tr>
-                <td colSpan="8" style={{ textAlign: 'center', color: '#e0b0ff' }}>
+                <td colSpan="9" style={{ textAlign: 'center', color: '#e0b0ff' }}>
                   등록된 고객이 없습니다
                 </td>
               </tr>
@@ -297,10 +290,15 @@ function AdminView({ onClose, onShowBirthday, onShowNotice, onShowCoupon, onShow
                 <tr key={customer.id}>
                   <td>{customer.nickname}</td>
                   <td>{customer.phone_number}</td>
-                  <td>{customer.birthday ? new Date(customer.birthday).toLocaleDateString('ko-KR') : '-'}</td>
+                  <td>{formatBirthday(customer.birthday)}</td>
                   <td>
-                    <span className="badge badge-warning">{customer.current_stamps}/10</span>
+                    {customer.current_stamps >= 10 ? (
+                      <span className="badge badge-success">완료</span>
+                    ) : (
+                      <span className="badge badge-warning">{customer.current_stamps}/10</span>
+                    )}
                   </td>
+                  <td>{customer.total_stamps}</td>
                   <td>{customer.coupons}개</td>
                   <td>{customer.visit_count}회</td>
                   <td>

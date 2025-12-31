@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { supabase } from '../supabaseClient';
+import { supabaseAdmin } from '../supabaseClient';
 
 function NoticeManagement({ onBack }) {
   const [notices, setNotices] = useState([]);
@@ -20,25 +20,14 @@ function NoticeManagement({ onBack }) {
 
   const loadNotices = async () => {
     try {
-      const { data, error } = await supabase
+      const { data, error } = await supabaseAdmin
         .from('notices')
         .select('*')
         .order('is_pinned', { ascending: false })
         .order('created_at', { ascending: false });
 
       if (error) throw error;
-      
-      // 로컬 스토리지에서 예약 정보 가져오기
-      const noticesWithSchedule = data.map(notice => {
-        const scheduleKey = `notice_schedule_${notice.id}`;
-        const scheduledAt = localStorage.getItem(scheduleKey);
-        return {
-          ...notice,
-          scheduled_at: scheduledAt
-        };
-      });
-      
-      setNotices(noticesWithSchedule || []);
+      setNotices(data || []);
     } catch (error) {
       console.error('Load notices error:', error);
     } finally {
@@ -65,19 +54,15 @@ function NoticeManagement({ onBack }) {
       };
 
       if (editingNotice) {
-        const { error } = await supabase
+        const { error } = await supabaseAdmin
           .from('notices')
           .update(submitData)
           .eq('id', editingNotice.id);
 
         if (error) throw error;
-        
-        // 로컬 스토리지의 예약 정보도 삭제
-        localStorage.removeItem(`notice_schedule_${editingNotice.id}`);
-        
         alert('✅ 공지사항이 수정되었습니다!');
       } else {
-        const { error } = await supabase
+        const { error } = await supabaseAdmin
           .from('notices')
           .insert([submitData]);
 
@@ -116,16 +101,12 @@ function NoticeManagement({ onBack }) {
     }
 
     try {
-      const { error } = await supabase
+      const { error } = await supabaseAdmin
         .from('notices')
         .delete()
         .eq('id', id);
 
       if (error) throw error;
-      
-      // 로컬 스토리지의 예약 정보도 삭제
-      localStorage.removeItem(`notice_schedule_${id}`);
-      
       alert('🗑️ 공지사항이 삭제되었습니다.');
       loadNotices();
     } catch (error) {
@@ -146,7 +127,6 @@ function NoticeManagement({ onBack }) {
   };
 
   const formatDate = (dateStr) => {
-    if (!dateStr) return '-';
     const date = new Date(dateStr);
     return date.toLocaleString('ko-KR', {
       year: 'numeric',

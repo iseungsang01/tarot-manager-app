@@ -5,13 +5,12 @@ import StampCard from './StampCard';
 function CustomerView() {
   const [phone, setPhone] = useState('');
   const [nickname, setNickname] = useState('');
-  const [birthDate, setBirthDate] = useState(''); // YYYY-MM-DD 형식
+  const [birthYear, setBirthYear] = useState('');
+  const [birthMonth, setBirthMonth] = useState('');
+  const [birthDay, setBirthDay] = useState('');
   const [customer, setCustomer] = useState(null);
   const [message, setMessage] = useState({ text: '', type: '' });
-  
-  const today = new Date().toISOString().split('T')[0];
 
-  // 3-4-4 포맷팅 함수
   const formatPhone = (value) => {
     const numbers = value.replace(/[^0-9]/g, '');
     if (numbers.length <= 3) return numbers;
@@ -24,7 +23,7 @@ function CustomerView() {
   };
 
   const checkCustomer = async () => {
-    if (!phone.match(/^\d{3}-\d{4}-\d{4}$/)) {
+    if (!phone.match(/^\d{3}-\d{3,4}-\d{4}$/)) {
       showMessage('올바른 전화번호를 입력해주세요.', 'error');
       return;
     }
@@ -43,12 +42,17 @@ function CustomerView() {
 
       if (!data) {
         // 신규 고객 등록
+        const currentYear = new Date().getFullYear();
+        const birthday = (birthYear || birthMonth || birthDay) 
+          ? `${birthYear || currentYear}-${(birthMonth || '01').padStart(2, '0')}-${(birthDay || '01').padStart(2, '0')}`
+          : null;
+
         const { data: newCustomer, error: insertError } = await supabase
           .from('customers')
           .insert([{
             phone_number: phone,
             nickname: nickname || '고객',
-            birthday: birthDate || null
+            birthday: birthday
           }])
           .select()
           .single();
@@ -59,7 +63,13 @@ function CustomerView() {
       } else {
         // 기존 고객 정보 업데이트 확인
         const hasNicknameChange = nickname && nickname !== data.nickname;
-        const hasBirthdayChange = birthDate && birthDate !== data.birthday;
+        
+        const currentYear = new Date().getFullYear();
+        const inputBirthday = (birthYear || birthMonth || birthDay)
+          ? `${birthYear || currentYear}-${(birthMonth || '01').padStart(2, '0')}-${(birthDay || '01').padStart(2, '0')}`
+          : null;
+        
+        const hasBirthdayChange = inputBirthday && inputBirthday !== data.birthday;
 
         if (hasNicknameChange || hasBirthdayChange) {
           let warningMessage = '⚠️ 고객 정보가 변경됩니다.\n\n';
@@ -69,8 +79,10 @@ function CustomerView() {
           }
           
           if (hasBirthdayChange) {
-            const oldBirthday = data.birthday ? new Date(data.birthday).toLocaleDateString('ko-KR') : '미등록';
-            const newBirthday = new Date(birthDate).toLocaleDateString('ko-KR');
+            const oldBirthday = data.birthday 
+              ? new Date(data.birthday).toLocaleDateString('ko-KR')
+              : '미등록';
+            const newBirthday = new Date(inputBirthday).toLocaleDateString('ko-KR');
             warningMessage += `생일: "${oldBirthday}" → "${newBirthday}"\n`;
           }
           
@@ -83,13 +95,14 @@ function CustomerView() {
             showMessage('고객 정보를 불러왔습니다.', 'success');
             return;
           }
+        }
 
-          // 정보 업데이트
+        if (nickname || inputBirthday) {
           await supabase
             .from('customers')
             .update({
               nickname: nickname || data.nickname,
-              birthday: birthDate || data.birthday
+              birthday: inputBirthday || data.birthday
             })
             .eq('id', data.id);
           
@@ -100,7 +113,11 @@ function CustomerView() {
             .single();
           data = updatedData;
           
-          showMessage('✅ 고객 정보가 변경되었습니다.', 'success');
+          if (hasNicknameChange || hasBirthdayChange) {
+            showMessage('✅ 고객 정보가 변경되었습니다.', 'success');
+          } else {
+            showMessage('고객 정보를 불러왔습니다.', 'success');
+          }
         } else {
           showMessage('고객 정보를 불러왔습니다.', 'success');
         }
@@ -159,22 +176,59 @@ function CustomerView() {
 
       <div className="input-group">
         <label>생일 (선택)</label>
-        <input
-          type="date"
-          value={birthDate}
-          onChange={(e) => setBirthDate(e.target.value)}
-          max={today}        // 오늘 이후 날짜 선택 불가 (연도 4자리 고정 효과)
-          min="1900-01-01"   // 너무 과거 날짜 방지
-          style={{ 
-            width: '100%',
-            padding: '15px',
-            border: '2px solid #8a2be2',
-            borderRadius: '10px',
-            fontSize: '16px',
-            background: 'rgba(255, 255, 255, 0.9)',
-            colorScheme: 'light'
-          }}
-        />
+        <div style={{ display: 'flex', gap: '10px' }}>
+          <select
+            value={birthYear}
+            onChange={(e) => setBirthYear(e.target.value)}
+            style={{ 
+              flex: 1, 
+              padding: '15px',
+              border: '2px solid #8a2be2',
+              borderRadius: '10px',
+              fontSize: '16px',
+              background: 'rgba(255, 255, 255, 0.9)'
+            }}
+          >
+            <option value="">년도</option>
+            {Array.from({ length: 100 }, (_, i) => new Date().getFullYear() - i).map(year => (
+              <option key={year} value={year}>{year}년</option>
+            ))}
+          </select>
+          <select
+            value={birthMonth}
+            onChange={(e) => setBirthMonth(e.target.value)}
+            style={{ 
+              flex: 1, 
+              padding: '15px',
+              border: '2px solid #8a2be2',
+              borderRadius: '10px',
+              fontSize: '16px',
+              background: 'rgba(255, 255, 255, 0.9)'
+            }}
+          >
+            <option value="">월</option>
+            {[...Array(12)].map((_, i) => (
+              <option key={i + 1} value={i + 1}>{i + 1}월</option>
+            ))}
+          </select>
+          <select
+            value={birthDay}
+            onChange={(e) => setBirthDay(e.target.value)}
+            style={{ 
+              flex: 1,
+              padding: '15px',
+              border: '2px solid #8a2be2',
+              borderRadius: '10px',
+              fontSize: '16px',
+              background: 'rgba(255, 255, 255, 0.9)'
+            }}
+          >
+            <option value="">일</option>
+            {[...Array(31)].map((_, i) => (
+              <option key={i + 1} value={i + 1}>{i + 1}일</option>
+            ))}
+          </select>
+        </div>
       </div>
 
       <button className="btn btn-primary" onClick={checkCustomer}>

@@ -1,21 +1,25 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { supabase } from '../supabaseClient';
+import { supabaseAdmin } from '../supabaseClient';
 
 function StoreRequestView({ onBack }) {
   const [requests, setRequests] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedRequest, setSelectedRequest] = useState(null);
   const [showResponseModal, setShowResponseModal] = useState(false);
-  const [adminResponse, setAdminResponse] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
 
   const loadStoreRequests = useCallback(async () => {
     setLoading(true);
     try {
-      let query = supabase
+      let query = supabaseAdmin
         .from('bug_reports')
-        .select('*')
-        .eq('category', 'store')
+        .select(`
+          *,
+          customers (
+            nickname,
+            phone_number
+          )
+        `)
         .order('created_at', { ascending: false });
 
       if (filterStatus !== 'all') {
@@ -25,36 +29,10 @@ function StoreRequestView({ onBack }) {
       const { data, error } = await query;
 
       if (error) throw error;
-      
-      // 로컬 스토리지에서 추가 정보 가져오기
-      const requestsWithLocalData = (data || []).map(request => {
-        const responseKey = `request_response_${request.id}`;
-        const customerKey = `request_customer_${request.id}`;
-        
-        const storedResponse = localStorage.getItem(responseKey);
-        const storedCustomer = localStorage.getItem(customerKey);
-        
-        let customerData = {};
-        if (storedCustomer) {
-          try {
-            customerData = JSON.parse(storedCustomer);
-          } catch (e) {
-            console.error('Parse error:', e);
-          }
-        }
-        
-        return {
-          ...request,
-          admin_response: storedResponse || request.admin_response,
-          customer_nickname: customerData.nickname || request.customer_nickname || '익명',
-          customer_phone: customerData.phone || request.customer_phone || '-'
-        };
-      });
-      
-      setRequests(requestsWithLocalData);
+      setRequests(data || []);
     } catch (error) {
       console.error('Error loading store requests:', error);
-      alert('매장 제안을 불러오는 중 오류가 발생했습니다.');
+      alert('제안을 불러오는 중 오류가 발생했습니다.');
     } finally {
       setLoading(false);
     }
@@ -66,7 +44,7 @@ function StoreRequestView({ onBack }) {
 
   const updateStatus = async (id, newStatus) => {
     try {
-      const { error } = await supabase
+      const { error } = await supabaseAdmin
         .from('bug_reports')
         .update({ status: newStatus })
         .eq('id', id);
@@ -81,62 +59,20 @@ function StoreRequestView({ onBack }) {
     }
   };
 
-  const openResponseModal = (request) => {
-    setSelectedRequest(request);
-    setAdminResponse(request.admin_response || '');
-    setShowResponseModal(true);
-  };
-
-  const saveResponse = async () => {
-    if (!selectedRequest) return;
-
-    if (!adminResponse.trim()) {
-      alert('답변 내용을 입력해주세요.');
-      return;
-    }
-
-    try {
-      // 상태를 완료로 변경
-      const { error } = await supabase
-        .from('bug_reports')
-        .update({ status: '완료' })
-        .eq('id', selectedRequest.id);
-
-      if (error) throw error;
-      
-      // 로컬 스토리지에 답변 저장
-      const responseKey = `request_response_${selectedRequest.id}`;
-      localStorage.setItem(responseKey, adminResponse);
-      
-      alert('✅ 답변이 저장되었고 상태가 "완료"로 변경되었습니다.');
-      setShowResponseModal(false);
-      setSelectedRequest(null);
-      setAdminResponse('');
-      loadStoreRequests();
-    } catch (error) {
-      console.error('Error saving response:', error);
-      alert('답변 저장 중 오류가 발생했습니다.');
-    }
-  };
-
   const deleteRequest = async (id) => {
-    if (!window.confirm('이 매장 제안을 삭제하시겠습니까?')) {
+    if (!window.confirm('이 제안을 삭제하시겠습니까?')) {
       return;
     }
 
     try {
-      const { error } = await supabase
+      const { error } = await supabaseAdmin
         .from('bug_reports')
         .delete()
         .eq('id', id);
 
       if (error) throw error;
       
-      // 로컬 스토리지 정보도 삭제
-      localStorage.removeItem(`request_response_${id}`);
-      localStorage.removeItem(`request_customer_${id}`);
-      
-      alert('🗑️ 매장 제안이 삭제되었습니다.');
+      alert('🗑️ 제안이 삭제되었습니다.');
       loadStoreRequests();
     } catch (error) {
       console.error('Error deleting request:', error);
@@ -144,10 +80,15 @@ function StoreRequestView({ onBack }) {
     }
   };
 
+  const openDetailModal = (request) => {
+    setSelectedRequest(request);
+    setShowResponseModal(true);
+  };
+
   const getStatusBadgeClass = (status) => {
     switch (status) {
       case '접수': return 'badge-info';
-      case '진행중': return 'badge-warning';
+      case '확인중': return 'badge-warning';
       case '완료': return 'badge-success';
       case '보류': return 'badge-secondary';
       default: return 'badge-normal';
@@ -169,7 +110,7 @@ function StoreRequestView({ onBack }) {
   const stats = requests.reduce((acc, req) => {
     acc.total++;
     if (req.status === '접수') acc.pending++;
-    if (req.status === '진행중') acc.inProgress++;
+    if (req.status === '확인중') acc.inProgress++;
     if (req.status === '완료') acc.completed++;
     return acc;
   }, { total: 0, pending: 0, inProgress: 0, completed: 0 });
@@ -177,7 +118,7 @@ function StoreRequestView({ onBack }) {
   return (
     <div className="store-request-view">
       <div className="admin-header">
-        <h1>🏬 매장 제안 관리</h1>
+        <h1>🏬 고객 제안 관리</h1>
         <button className="btn-close" onClick={onBack}>
           ✕ 닫기
         </button>
@@ -194,7 +135,7 @@ function StoreRequestView({ onBack }) {
         </div>
         <div className="stat-box">
           <div className="stat-number">{stats.inProgress}</div>
-          <div className="stat-label">진행중</div>
+          <div className="stat-label">확인중</div>
         </div>
         <div className="stat-box">
           <div className="stat-number">{stats.completed}</div>
@@ -218,11 +159,11 @@ function StoreRequestView({ onBack }) {
           접수
         </button>
         <button 
-          className={`btn ${filterStatus === '진행중' ? 'btn-primary' : 'btn-info'}`}
-          onClick={() => setFilterStatus('진행중')}
+          className={`btn ${filterStatus === '확인중' ? 'btn-primary' : 'btn-info'}`}
+          onClick={() => setFilterStatus('확인중')}
           style={{ width: 'auto', padding: '10px 20px' }}
         >
-          진행중
+          확인중
         </button>
         <button 
           className={`btn ${filterStatus === '완료' ? 'btn-primary' : 'btn-info'}`}
@@ -238,8 +179,8 @@ function StoreRequestView({ onBack }) {
       ) : requests.length === 0 ? (
         <div className="empty-state">
           <div className="empty-icon">🔭</div>
-          <h3>등록된 매장 제안이 없습니다</h3>
-          <p>고객들의 매장 제안을 기다리고 있습니다.</p>
+          <h3>등록된 제안이 없습니다</h3>
+          <p>고객들의 제안을 기다리고 있습니다.</p>
         </div>
       ) : (
         <div className="data-table">
@@ -248,6 +189,7 @@ function StoreRequestView({ onBack }) {
               <tr>
                 <th>상태</th>
                 <th>고객</th>
+                <th>유형</th>
                 <th>제목</th>
                 <th>내용</th>
                 <th>제안일</th>
@@ -263,10 +205,15 @@ function StoreRequestView({ onBack }) {
                     </span>
                   </td>
                   <td>
-                    <div>{request.customer_nickname}</div>
+                    <div>{request.customers?.nickname || '익명'}</div>
                     <div style={{ fontSize: '12px', opacity: 0.7 }}>
-                      {request.customer_phone}
+                      {request.customers?.phone_number || '-'}
                     </div>
+                  </td>
+                  <td>
+                    <span className="badge badge-info">
+                      {request.report_type}
+                    </span>
                   </td>
                   <td style={{ maxWidth: '200px' }}>
                     {request.title}
@@ -299,16 +246,16 @@ function StoreRequestView({ onBack }) {
                         }}
                       >
                         <option value="접수">접수</option>
-                        <option value="진행중">진행중</option>
+                        <option value="확인중">확인중</option>
                         <option value="완료">완료</option>
                         <option value="보류">보류</option>
                       </select>
                       <button 
                         className="btn-edit"
-                        onClick={() => openResponseModal(request)}
-                        title="답변 작성"
+                        onClick={() => openDetailModal(request)}
+                        title="상세보기"
                       >
-                        💬
+                        👁️
                       </button>
                       <button 
                         className="btn-delete"
@@ -329,11 +276,17 @@ function StoreRequestView({ onBack }) {
       {showResponseModal && selectedRequest && (
         <div className="modal-overlay" onClick={() => setShowResponseModal(false)}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-            <h2>💬 관리자 답변 작성</h2>
+            <h2>📋 제안 상세 정보</h2>
             
             <div className="request-detail" style={{ marginBottom: '20px', padding: '15px', background: 'rgba(138, 43, 226, 0.1)', borderRadius: '10px' }}>
               <div style={{ marginBottom: '10px' }}>
-                <strong style={{ color: 'gold' }}>고객:</strong> {selectedRequest.customer_nickname} ({selectedRequest.customer_phone})
+                <strong style={{ color: 'gold' }}>고객:</strong> {selectedRequest.customers?.nickname || '익명'} ({selectedRequest.customers?.phone_number || '-'})
+              </div>
+              <div style={{ marginBottom: '10px' }}>
+                <strong style={{ color: 'gold' }}>유형:</strong> {selectedRequest.report_type}
+              </div>
+              <div style={{ marginBottom: '10px' }}>
+                <strong style={{ color: 'gold' }}>상태:</strong> <span className={`badge ${getStatusBadgeClass(selectedRequest.status)}`}>{selectedRequest.status}</span>
               </div>
               <div style={{ marginBottom: '10px' }}>
                 <strong style={{ color: 'gold' }}>제목:</strong> {selectedRequest.title}
@@ -349,57 +302,13 @@ function StoreRequestView({ onBack }) {
               </div>
             </div>
 
-            <div style={{ 
-              padding: '12px', 
-              background: 'rgba(74, 124, 44, 0.3)', 
-              border: '2px solid #6dbf3b', 
-              borderRadius: '8px', 
-              marginBottom: '15px',
-              color: '#90EE90',
-              fontSize: '14px',
-              textAlign: 'center'
-            }}>
-              ℹ️ 답변을 저장하면 자동으로 상태가 "완료"로 변경됩니다.
-            </div>
-
-            <div className="input-group">
-              <label>답변 내용</label>
-              <textarea
-                value={adminResponse}
-                onChange={(e) => setAdminResponse(e.target.value)}
-                placeholder="고객에게 전달할 답변을 작성하세요...&#10;&#10;답변을 저장하면 자동으로 '완료' 상태로 변경됩니다."
-                rows="8"
-                style={{
-                  width: '100%',
-                  padding: '12px',
-                  border: '2px solid #8a2be2',
-                  borderRadius: '10px',
-                  fontSize: '16px',
-                  background: 'rgba(255, 255, 255, 0.9)',
-                  fontFamily: 'inherit',
-                  resize: 'vertical'
-                }}
-              />
-            </div>
-
             <div style={{ display: 'flex', gap: '10px', marginTop: '20px' }}>
               <button 
                 className="btn btn-primary" 
-                onClick={saveResponse}
+                onClick={() => setShowResponseModal(false)}
                 style={{ flex: 1 }}
               >
-                💾 답변 저장 및 완료 처리
-              </button>
-              <button 
-                className="btn btn-warning" 
-                onClick={() => {
-                  setShowResponseModal(false);
-                  setSelectedRequest(null);
-                  setAdminResponse('');
-                }}
-                style={{ flex: 1 }}
-              >
-                취소
+                닫기
               </button>
             </div>
           </div>
