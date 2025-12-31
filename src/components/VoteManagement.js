@@ -70,7 +70,6 @@ function VoteManagement({ onBack }) {
 
       if (voteError) throw voteError;
 
-      // vote_responses에서 응답 집계
       const { data: responses, error: responseError } = await supabaseAdmin
         .from('vote_responses')
         .select('selected_options')
@@ -78,7 +77,6 @@ function VoteManagement({ onBack }) {
 
       if (responseError) throw responseError;
 
-      // 옵션별 투표 수 계산
       const voteCounts = {};
       let totalVotes = 0;
 
@@ -267,45 +265,17 @@ function VoteManagement({ onBack }) {
   };
 
   return (
-    <div style={{ 
-      padding: '30px', 
-      maxWidth: '100%', 
-      margin: '0 auto',
-      background: 'linear-gradient(135deg, #1a0033 0%, #2d004d 100%)',
-      minHeight: '100vh',
-      color: 'white'
-    }}>
-      <div style={{
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        marginBottom: '30px',
-        background: 'linear-gradient(135deg, #2d004d 0%, #1a0033 100%)',
-        borderRadius: '20px',
-        padding: '30px',
-        border: '3px solid #ffd700',
-        boxShadow: '0 20px 60px rgba(255, 215, 0, 0.3)'
-      }}>
+    <div className="vote-management">
+      <div className="vote-header">
         <div>
-          <h1 style={{ color: '#ffd700', margin: '0 0 10px 0', fontSize: '32px', fontWeight: '700' }}>
-            📊 투표 관리
-          </h1>
-          <p style={{ color: '#e0b0ff', margin: 0, fontSize: '16px' }}>
-            고객 설문조사 및 투표를 관리합니다 (익명 투표)
-          </p>
+          <h1>📊 투표 관리</h1>
+          <p className="vote-header-desc">고객 설문조사 및 투표를 관리합니다 (익명 투표)</p>
         </div>
-        <div style={{ display: 'flex', gap: '10px' }}>
-          <button 
-            onClick={handleCreateVote}
-            className="btn btn-success"
-            style={{ width: 'auto', whiteSpace: 'nowrap' }}
-          >
+        <div className="header-buttons">
+          <button onClick={handleCreateVote} className="btn btn-success">
             ➕ 새 투표 만들기
           </button>
-          <button 
-            onClick={onBack}
-            className="btn-close"
-          >
+          <button onClick={onBack} className="btn-close">
             ✕ 닫기
           </button>
         </div>
@@ -345,26 +315,28 @@ function VoteManagement({ onBack }) {
 
           <div className="input-group">
             <label>투표 옵션 * (최소 2개)</label>
-            {formData.options.map((option, index) => (
-              <div key={index} style={{ display: 'flex', gap: '10px', marginBottom: '10px' }}>
-                <input
-                  type="text"
-                  value={option}
-                  onChange={(e) => handleOptionChange(index, e.target.value)}
-                  placeholder={`옵션 ${index + 1}`}
-                  maxLength="100"
-                  style={{ flex: 1 }}
-                />
-                {formData.options.length > 2 && (
-                  <button
-                    onClick={() => handleRemoveOption(index)}
-                    className="btn-delete"
-                  >
-                    🗑️
-                  </button>
-                )}
-              </div>
-            ))}
+            <div className="vote-options-list">
+              {formData.options.map((option, index) => (
+                <div key={index} className="vote-option-input-group">
+                  <input
+                    type="text"
+                    value={option}
+                    onChange={(e) => handleOptionChange(index, e.target.value)}
+                    placeholder={`옵션 ${index + 1}`}
+                    maxLength="100"
+                    style={{ flex: 1 }}
+                  />
+                  {formData.options.length > 2 && (
+                    <button
+                      onClick={() => handleRemoveOption(index)}
+                      className="btn-delete"
+                    >
+                      🗑️
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
             <button
               onClick={handleAddOption}
               className="btn btn-info"
@@ -454,30 +426,18 @@ function VoteManagement({ onBack }) {
                     : 0;
 
                   return (
-                    <div key={option.index} style={{
-                      background: 'rgba(138, 43, 226, 0.2)',
-                      border: '2px solid #8a2be2',
-                      borderRadius: '10px',
-                      padding: '15px'
-                    }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-                        <div style={{ color: '#e0b0ff', fontWeight: '600' }}>{option.text}</div>
-                        <div style={{ color: '#ffd700', fontWeight: '700' }}>
+                    <div key={option.index} className="vote-result-bar">
+                      <div className="vote-result-header">
+                        <div className="vote-result-label">{option.text}</div>
+                        <div className="vote-result-count">
                           {option.count}표 ({percentage}%)
                         </div>
                       </div>
-                      <div style={{
-                        background: 'rgba(138, 43, 226, 0.3)',
-                        borderRadius: '5px',
-                        height: '20px',
-                        overflow: 'hidden'
-                      }}>
-                        <div style={{
-                          background: 'linear-gradient(135deg, #8a2be2 0%, #9370db 100%)',
-                          height: '100%',
-                          width: `${percentage}%`,
-                          transition: 'width 0.5s ease'
-                        }} />
+                      <div className="vote-result-progress">
+                        <div 
+                          className="vote-result-progress-fill"
+                          style={{ width: `${percentage}%` }}
+                        />
                       </div>
                     </div>
                   );
@@ -504,63 +464,53 @@ function VoteManagement({ onBack }) {
           <p>새 투표를 만들어 고객들의 의견을 들어보세요</p>
         </div>
       ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(400px, 1fr))', gap: '20px' }}>
+        <div className="vote-grid">
           {votes.map((vote) => (
-            <div key={vote.id} className="birthday-card" style={{
-              opacity: vote.is_active ? 1 : 0.7
-            }}>
+            <div key={vote.id} className={`vote-card ${vote.is_active ? '' : 'inactive'}`}>
               <div style={{ marginBottom: '15px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
-                  <h3 style={{ color: '#ffd700', margin: 0, fontSize: '18px' }}>
-                    {vote.title}
-                  </h3>
+                <div className="vote-card-header">
+                  <h3 className="vote-card-title">{vote.title}</h3>
                   <span className={`badge ${vote.is_active ? 'badge-success' : 'badge-secondary'}`}>
                     {vote.is_active ? '✅ 진행중' : '⏸️ 종료'}
                   </span>
                 </div>
 
                 {vote.description && (
-                  <p style={{ color: '#e0b0ff', fontSize: '14px', marginBottom: '10px' }}>
-                    {vote.description}
-                  </p>
+                  <p className="vote-card-desc">{vote.description}</p>
                 )}
 
-                <div style={{ fontSize: '13px', color: '#e0b0ff' }}>
+                <div className="vote-card-info">
                   📋 옵션: {vote.options.length}개 | 
                   {vote.allow_multiple && ` 복수선택 (최대 ${vote.max_selections}개) | `}
                   🔒 익명
                 </div>
-                <div style={{ fontSize: '13px', color: '#e0b0ff', marginTop: '5px' }}>
+                <div className="vote-card-info">
                   ⏰ 종료: {formatDate(vote.ends_at)}
                 </div>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '8px' }}>
+              <div className="vote-card-actions">
                 <button
                   onClick={() => loadVoteResults(vote.id)}
                   className="btn btn-success"
-                  style={{ width: '100%', padding: '10px', fontSize: '14px' }}
                 >
                   📊 결과
                 </button>
                 <button
                   onClick={() => handleEditVote(vote)}
                   className="btn btn-info"
-                  style={{ width: '100%', padding: '10px', fontSize: '14px' }}
                 >
                   ✏️ 수정
                 </button>
                 <button
                   onClick={() => handleToggleActive(vote)}
                   className="btn btn-warning"
-                  style={{ width: '100%', padding: '10px', fontSize: '14px' }}
                 >
                   {vote.is_active ? '⏸️ 종료' : '▶️ 재개'}
                 </button>
                 <button
                   onClick={() => handleDeleteVote(vote.id)}
                   className="btn btn-primary"
-                  style={{ width: '100%', padding: '10px', fontSize: '14px' }}
                 >
                   🗑️ 삭제
                 </button>
