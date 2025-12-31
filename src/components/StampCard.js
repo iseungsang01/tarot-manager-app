@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { supabase } from '../supabaseClient';
+import { supabaseAdmin } from '../supabaseClient';
 
 const tarotCards = [
   { emoji: '🃏', name: 'The Fool' },
@@ -22,7 +22,7 @@ function StampCard({ customer, onUpdate, onMessage }) {
 
   const loadVisitHistory = useCallback(async () => {
     try {
-      const { data, error } = await supabase
+      const { data, error } = await supabaseAdmin
         .from('visit_history')
         .select('*')
         .eq('customer_id', customer.id)
@@ -63,7 +63,7 @@ function StampCard({ customer, onUpdate, onMessage }) {
 
     try {
       // visit_history에 INSERT하면 트리거가 자동으로 customers 업데이트
-      const { error: historyError } = await supabase
+      const { error: historyError } = await supabaseAdmin
         .from('visit_history')
         .insert([{
           customer_id: customer.id,
@@ -104,7 +104,7 @@ function StampCard({ customer, onUpdate, onMessage }) {
       const stampDifference = newCount - customer.current_stamps;
       
       // 직접 수정하는 경우는 트리거를 거치지 않고 customers 테이블 업데이트
-      const { error: updateError } = await supabase
+      const { error: updateError } = await supabaseAdmin
         .from('customers')
         .update({
           current_stamps: newCount,
@@ -132,7 +132,7 @@ function StampCard({ customer, onUpdate, onMessage }) {
     try {
       const couponCode = 'COUPON' + Date.now().toString().slice(-8);
 
-      const { error: couponError } = await supabase
+      const { error: couponError } = await supabaseAdmin
         .from('coupon_history')
         .insert([{
           customer_id: customer.id,
@@ -142,7 +142,7 @@ function StampCard({ customer, onUpdate, onMessage }) {
 
       if (couponError) throw couponError;
 
-      const { error: updateError } = await supabase
+      const { error: updateError } = await supabaseAdmin
         .from('customers')
         .update({
           current_stamps: 0,

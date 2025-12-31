@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { supabase } from '../supabaseClient';
+import { supabaseAdmin } from '../supabaseClient';
 import StampCard from './StampCard';
 
 function CustomerView() {
@@ -29,7 +29,7 @@ function CustomerView() {
     }
 
     try {
-      let { data, error } = await supabase
+      let { data, error } = await supabaseAdmin
         .from('customers')
         .select('*')
         .eq('phone_number', phone)
@@ -47,7 +47,7 @@ function CustomerView() {
           ? `${birthYear || currentYear}-${(birthMonth || '01').padStart(2, '0')}-${(birthDay || '01').padStart(2, '0')}`
           : null;
 
-        const { data: newCustomer, error: insertError } = await supabase
+        const { data: newCustomer, error: insertError } = await supabaseAdmin
           .from('customers')
           .insert([{
             phone_number: phone,
@@ -98,7 +98,7 @@ function CustomerView() {
         }
 
         if (nickname || inputBirthday) {
-          await supabase
+          await supabaseAdmin
             .from('customers')
             .update({
               nickname: nickname || data.nickname,
@@ -106,7 +106,7 @@ function CustomerView() {
             })
             .eq('id', data.id);
           
-          const { data: updatedData } = await supabase
+          const { data: updatedData } = await supabaseAdmin
             .from('customers')
             .select('*')
             .eq('id', data.id)
@@ -137,7 +137,7 @@ function CustomerView() {
 
   const refreshCustomer = async () => {
     if (customer) {
-      const { data } = await supabase
+      const { data } = await supabaseAdmin
         .from('customers')
         .select('*')
         .eq('id', customer.id)
