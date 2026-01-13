@@ -67,7 +67,6 @@ function StampCard({ customer, onUpdate, onMessage }) {
         .from('visit_history')
         .insert([{
           customer_id: customer.id,
-          stamps_added: actualCount
         }]);
 
       if (historyError) throw historyError;
