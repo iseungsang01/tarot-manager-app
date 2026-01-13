@@ -42,9 +42,11 @@ function StampCard({ customer, onUpdate, onMessage }) {
     setEditStampValue(customer.current_stamps);
   }, [customer.id, customer.current_stamps, loadVisitHistory]);
 
+  // --- 핵심 수정 영역: 트리거 없이 직접 업데이트 ---
   const addStamp = async () => {
     const count = parseInt(stampCount) || 1;
 
+    // 1. 유효성 검사
     if (count < 1 || count > 10) {
       onMessage('스탬프는 1~10개 사이로 입력해주세요.', 'error');
       return;
@@ -56,31 +58,40 @@ function StampCard({ customer, onUpdate, onMessage }) {
     }
 
     const actualCount = Math.min(count, 10 - customer.current_stamps);
-
-    if (actualCount < count) {
-      onMessage(`10개를 초과할 수 없어 ${actualCount}개만 추가됩니다.`, 'error');
-    }
+    const newCurrentStamps = customer.current_stamps + actualCount;
 
     try {
-      // ✅ 수정: visit_history에만 삽입 (트리거가 자동으로 customers 테이블 업데이트)
+      // 2. 방문 기록 삽입
       const { error: historyError } = await supabaseAdmin
         .from('visit_history')
-        .insert([{
-          customer_id: customer.id,
-        }]);
+        .insert([{ customer_id: customer.id }]);
 
       if (historyError) throw historyError;
 
+      // 3. 고객 정보 직접 업데이트 (트리거 대신 수행)
+      const { error: updateError } = await supabaseAdmin
+        .from('customers')
+        .update({
+          current_stamps: newCurrentStamps,
+          total_stamps: customer.total_stamps + actualCount,
+          visit_count: (customer.visit_count || 0) + 1,
+          last_visit: new Date().toISOString()
+        })
+        .eq('id', customer.id);
+
+      if (updateError) throw updateError;
+
+      // 4. UI 및 메시지 처리
       onUpdate();
       loadVisitHistory();
       setShowStampInput(false);
       setStampCount(1);
 
-      if (customer.current_stamps + actualCount === 10) {
+      if (newCurrentStamps === 10) {
         onMessage('🌟 모든 카드를 모았습니다! 운명의 쿠폰을 받으세요!', 'success');
       } else {
         const cardNames = [];
-        for (let i = customer.current_stamps; i < customer.current_stamps + actualCount; i++) {
+        for (let i = customer.current_stamps; i < newCurrentStamps; i++) {
           cardNames.push(tarotCards[i].name);
         }
         onMessage(`✨ ${actualCount}개의 카드를 획득했습니다!\n${cardNames.join(', ')}`, 'success');
@@ -102,7 +113,6 @@ function StampCard({ customer, onUpdate, onMessage }) {
     try {
       const stampDifference = newCount - customer.current_stamps;
       
-      // ✅ 수정 기능은 트리거 없이 직접 업데이트 (정상 동작)
       const { error: updateError } = await supabaseAdmin
         .from('customers')
         .update({
@@ -144,7 +154,7 @@ function StampCard({ customer, onUpdate, onMessage }) {
         .from('customers')
         .update({
           current_stamps: 0,
-          coupons: customer.coupons + 1
+          coupons: (customer.coupons || 0) + 1
         })
         .eq('id', customer.id);
 
@@ -183,7 +193,7 @@ function StampCard({ customer, onUpdate, onMessage }) {
         </div>
 
         <div className="visit-info">
-          최근 방문: {new Date(customer.last_visit).toLocaleString('ko-KR')} | 총 {customer.visit_count}회 방문
+          최근 방문: {customer.last_visit ? new Date(customer.last_visit).toLocaleString('ko-KR') : '기록 없음'} | 총 {customer.visit_count || 0}회 방문
         </div>
       </div>
 
@@ -214,23 +224,8 @@ function StampCard({ customer, onUpdate, onMessage }) {
                 background: 'rgba(255, 255, 255, 0.9)'
               }}
             />
-            <button 
-              className="btn btn-success" 
-              onClick={addStamp} 
-              style={{ flex: 1 }}
-            >
-              추가
-            </button>
-            <button 
-              className="btn btn-warning" 
-              onClick={() => {
-                setShowStampInput(false);
-                setStampCount(1);
-              }}
-              style={{ flex: 1 }}
-            >
-              취소
-            </button>
+            <button className="btn btn-success" onClick={addStamp} style={{ flex: 1 }}>추가</button>
+            <button className="btn btn-warning" onClick={() => setShowStampInput(false)} style={{ flex: 1 }}>취소</button>
           </div>
         </div>
       )}
@@ -262,23 +257,8 @@ function StampCard({ customer, onUpdate, onMessage }) {
                 background: 'rgba(255, 255, 255, 0.9)'
               }}
             />
-            <button 
-              className="btn btn-success" 
-              onClick={editStampCount} 
-              style={{ flex: 1 }}
-            >
-              수정
-            </button>
-            <button 
-              className="btn btn-warning" 
-              onClick={() => {
-                setShowEditStamp(false);
-                setEditStampValue(customer.current_stamps);
-              }}
-              style={{ flex: 1 }}
-            >
-              취소
-            </button>
+            <button className="btn btn-success" onClick={editStampCount} style={{ flex: 1 }}>수정</button>
+            <button className="btn btn-warning" onClick={() => setShowEditStamp(false)} style={{ flex: 1 }}>취소</button>
           </div>
         </div>
       )}
